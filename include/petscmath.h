@@ -701,7 +701,7 @@ typedef PetscReal MatReal;
 struct petsc_mpiu_2scalar {PetscScalar a,b;};
 PETSC_EXTERN MPI_Datatype MPIU_2SCALAR PetscAttrMPITypeTagLayoutCompatible(struct petsc_mpiu_2scalar);
 
-#if !defined(MPI_2INT)
+#if !defined(PETSC_HAVE_MPI_2INT)
 struct petsc_mpiu_2mpiint {PetscMPIInt a,b;};
 PETSC_EXTERN MPI_Datatype MPI_2INT PetscAttrMPITypeTagLayoutCompatible(struct petsc_mpiu_2mpiint);
 #endif
