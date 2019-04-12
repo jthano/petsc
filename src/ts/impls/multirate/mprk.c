@@ -406,9 +406,10 @@ PetscErrorCode TSMPRKRegisterDestroy(void)
     ierr = PetscFree3(t->Asb,t->bsb,t->csb);CHKERRQ(ierr);
     ierr = PetscFree3(t->Amb,t->bmb,t->cmb);CHKERRQ(ierr);
     ierr = PetscFree3(t->Af,t->bf,t->cf);CHKERRQ(ierr);
-    ierr = PetscFree2(t->rsb,t->rmb);CHKERRQ(ierr);
-    ierr = PetscFree (t->name);CHKERRQ(ierr);
-    ierr = PetscFree (link);CHKERRQ(ierr);
+    ierr = PetscFree(t->rsb);CHKERRQ(ierr);
+    ierr = PetscFree(t->rmb);CHKERRQ(ierr);
+    ierr = PetscFree(t->name);CHKERRQ(ierr);
+    ierr = PetscFree(link);CHKERRQ(ierr);
   }
   TSMPRKRegisterAllCalled = PETSC_FALSE;
   PetscFunctionReturn(0);
@@ -941,7 +942,7 @@ static PetscErrorCode TSStep_MPRKSPLIT(TS ts)
     if (!(tab->np == 3 && mprk->is_medium)) {
       ierr = TSComputeRHSFunction(mprk->subts_slowbuffer,t+h*csb[i],Y[i],YdotRHS_slowbuffer[i]);CHKERRQ(ierr);
     }
-    ierr = TSComputeRHSFunction(mprk->subts_fast,t+h*cf[i],Y[i],YdotRHS_fast[i]);
+    ierr = TSComputeRHSFunction(mprk->subts_fast,t+h*cf[i],Y[i],YdotRHS_fast[i]);CHKERRQ(ierr);
   }
 
   ierr = TSEvaluateStep(ts,tab->order,ts->vec_sol,NULL);CHKERRQ(ierr);

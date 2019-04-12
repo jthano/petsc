@@ -279,7 +279,6 @@ PetscErrorCode FVRHSFunction_2WaySplit(TS ts,PetscReal time,Vec X,Vec F,void *vc
         uR[j] = x[(i-0)*dof+j]-slope[(i-0)*dof+j]*hxf/2;
       }
       ierr    = (*ctx->physics2.riemann2)(ctx->physics2.user,dof,uL,uR,ctx->flux,&maxspeed);CHKERRQ(ierr);
-      cfl_idt = PetscMax(cfl_idt,PetscAbsScalar(maxspeed/hxf)); /* Max allowable value of 1/Delta t */
       if (i > xs) {
         for (j=0; j<dof; j++) f[(i-1)*dof+j] -= ctx->flux[j]/hxf;
       }
@@ -304,6 +303,7 @@ PetscErrorCode FVRHSFunction_2WaySplit(TS ts,PetscReal time,Vec X,Vec F,void *vc
         uR[j] = x[(i-0)*dof+j]-slope[(i-0)*dof+j]*hxs/2;
       }
       ierr    = (*ctx->physics2.riemann2)(ctx->physics2.user,dof,uL,uR,ctx->flux,&maxspeed);CHKERRQ(ierr);
+      cfl_idt = PetscMax(cfl_idt,PetscAbsScalar(maxspeed/hxs)); /* Max allowable value of 1/Delta t */
       if (i > xs) {
         for (j=0; j<dof; j++) f[(i-1)*dof+j] -= ctx->flux[j]/hxs;
       }
@@ -316,7 +316,7 @@ PetscErrorCode FVRHSFunction_2WaySplit(TS ts,PetscReal time,Vec X,Vec F,void *vc
   ierr = DMDAVecRestoreArray(da,F,&f);CHKERRQ(ierr);
   ierr = DMDARestoreArray(da,PETSC_TRUE,&slope);CHKERRQ(ierr);
   ierr = DMRestoreLocalVector(da,&Xloc);CHKERRQ(ierr);
-  ierr = MPI_Allreduce(&cfl_idt,&ctx->cfl_idt,1,MPIU_REAL,MPIU_MAX,PetscObjectComm((PetscObject)da));CHKERRQ(ierr);
+  ierr = MPI_Allreduce(&cfl_idt,&ctx->cfl_idt,1,MPIU_SCALAR,MPIU_MAX,PetscObjectComm((PetscObject)da));CHKERRQ(ierr);
   if (0) {
     /* We need to a way to inform the TS of a CFL constraint, this is a debugging fragment */
     PetscReal dt,tnow;
@@ -456,7 +456,7 @@ PetscErrorCode FVRHSFunctionslow_2WaySplit(TS ts,PetscReal time,Vec X,Vec F,void
   ierr = VecRestoreArray(F,&f);CHKERRQ(ierr);
   ierr = DMDARestoreArray(da,PETSC_TRUE,&slope);CHKERRQ(ierr);
   ierr = DMRestoreLocalVector(da,&Xloc);CHKERRQ(ierr);
-  ierr = MPI_Allreduce(&cfl_idt,&ctx->cfl_idt,1,MPIU_REAL,MPIU_MAX,PetscObjectComm((PetscObject)da));CHKERRQ(ierr);
+  ierr = MPI_Allreduce(&cfl_idt,&ctx->cfl_idt,1,MPIU_SCALAR,MPIU_MAX,PetscObjectComm((PetscObject)da));CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
@@ -888,14 +888,14 @@ int main(int argc,char *argv[])
     ierr = DMDAVecRestoreArrayRead(da,X0,&ptr_X0);CHKERRQ(ierr);
     ierr = DMDAVecRestoreArrayRead(da,X,&ptr_X);CHKERRQ(ierr);
     mass_difference = mass_final - mass_initial;
-    ierr = MPI_Allreduce(&mass_difference,&mass_differenceg,1,MPIU_REAL,MPIU_SUM,comm);CHKERRQ(ierr);
-    ierr = PetscPrintf(comm,"mass difference %.6g\n",(double)mass_differenceg);CHKERRQ(ierr);
-    ierr = PetscPrintf(comm,"Final time %8.5f, steps %D\n",(double)ptime,steps);CHKERRQ(ierr);
-    ierr = PetscPrintf(comm,"Maximum allowable stepsize according to CFL %8.5f\n",(double)1.0/ctx.cfl_idt);CHKERRQ(ierr);
+    ierr = MPI_Allreduce(&mass_difference,&mass_differenceg,1,MPIU_SCALAR,MPIU_SUM,comm);CHKERRQ(ierr);
+    ierr = PetscPrintf(comm,"Mass difference %g\n",(double)mass_differenceg);CHKERRQ(ierr);
+    ierr = PetscPrintf(comm,"Final time %g, steps %D\n",(double)ptime,steps);CHKERRQ(ierr);
+    ierr = PetscPrintf(comm,"Maximum allowable stepsize according to CFL %g\n",(double)1.0/ctx.cfl_idt);CHKERRQ(ierr);
     if (ctx.exact) {
       PetscReal nrm1=0;
       ierr = SolutionErrorNorms_2WaySplit(&ctx,da,ptime,X,&nrm1);CHKERRQ(ierr);
-      ierr = PetscPrintf(comm,"Error ||x-x_e||_1 %8.4e\n",(double)nrm1);CHKERRQ(ierr);
+      ierr = PetscPrintf(comm,"Error ||x-x_e||_1 %g\n",(double)nrm1);CHKERRQ(ierr);
     }
     if (ctx.simulation) {
       PetscReal    nrm1=0;
@@ -920,7 +920,7 @@ int main(int argc,char *argv[])
       }
       ierr = VecRestoreArrayRead(X,&ptr_X);CHKERRQ(ierr);
       ierr = VecRestoreArrayRead(XR,&ptr_XR);CHKERRQ(ierr);
-      ierr = PetscPrintf(comm,"Error ||x-x_e||_1 %8.4e\n",(double)nrm1);CHKERRQ(ierr);
+      ierr = PetscPrintf(comm,"Error ||x-x_e||_1 %g\n",(double)nrm1);CHKERRQ(ierr);
       ierr = VecDestroy(&XR);CHKERRQ(ierr);
     }
   }

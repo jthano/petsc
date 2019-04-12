@@ -278,7 +278,7 @@ static PetscErrorCode FVRHSFunction(TS ts,PetscReal time,Vec X,Vec F,void *vctx)
   ierr = DMDAVecRestoreArray(da,Xloc,&x);CHKERRQ(ierr);
   ierr = DMDAVecRestoreArray(da,F,&f);CHKERRQ(ierr);
   ierr = DMRestoreLocalVector(da,&Xloc);CHKERRQ(ierr);
-  ierr = MPI_Allreduce(&cfl_idt,&ctx->cfl_idt,1,MPIU_REAL,MPIU_MAX,PetscObjectComm((PetscObject)da));CHKERRQ(ierr);
+  ierr = MPI_Allreduce(&cfl_idt,&ctx->cfl_idt,1,MPIU_SCALAR,MPIU_MAX,PetscObjectComm((PetscObject)da));CHKERRQ(ierr);
   if (0) {
     /* We need to a way to inform the TS of a CFL constraint, this is a debugging fragment */
     PetscReal dt,tnow;
@@ -600,14 +600,14 @@ static PetscErrorCode SolutionStatsView(DM da,Vec X,PetscViewer viewer)
     for (i=xs; i<xs+xm; i++) {
       for (j=0; j<dof; j++) tvsum += PetscAbsScalar(x[i*dof+j]-x[(i-1)*dof+j]);
     }
-    ierr = MPI_Allreduce(&tvsum,&tvgsum,1,MPIU_REAL,MPIU_SUM,PetscObjectComm((PetscObject)da));CHKERRQ(ierr);
+    ierr = MPI_Allreduce(&tvsum,&tvgsum,1,MPIU_SCALAR,MPIU_SUM,PetscObjectComm((PetscObject)da));CHKERRQ(ierr);
     ierr = DMDAVecRestoreArrayRead(da,Xloc,(void*)&x);CHKERRQ(ierr);
     ierr = DMRestoreLocalVector(da,&Xloc);CHKERRQ(ierr);
 
     ierr = VecMin(X,&imin,&xmin);CHKERRQ(ierr);
     ierr = VecMax(X,&imax,&xmax);CHKERRQ(ierr);
     ierr = VecSum(X,&sum);CHKERRQ(ierr);
-    ierr = PetscViewerASCIIPrintf(viewer,"Solution range [%8.5f,%8.5f] with extrema at %D and %D, mean %8.5f, ||x||_TV %8.5f\n",(double)xmin,(double)xmax,imin,imax,(double)(sum/Mx),(double)(tvgsum/Mx));CHKERRQ(ierr);
+    ierr = PetscViewerASCIIPrintf(viewer,"Solution range [%g,%g] with extrema at %D and %D, mean %g, ||x||_TV %g\n",(double)xmin,(double)xmax,imin,imax,(double)(sum/Mx),(double)(tvgsum/Mx));CHKERRQ(ierr);
   } else SETERRQ(PETSC_COMM_SELF,1,"Viewer type not supported");
   PetscFunctionReturn(0);
 }
@@ -773,13 +773,13 @@ int main(int argc,char *argv[])
     ierr = DMDAVecRestoreArrayRead(da,X0,&ptr_X0);CHKERRQ(ierr);
     ierr = DMDAVecRestoreArrayRead(da,X,&ptr_X);CHKERRQ(ierr);
     mass_difference = mass_final-mass_initial;
-    ierr = MPI_Allreduce(&mass_difference,&mass_differenceg,1,MPIU_REAL,MPIU_SUM,comm);CHKERRQ(ierr);
-    ierr = PetscPrintf(comm,"mass difference %.6g\n",(double)mass_differenceg);CHKERRQ(ierr);
-    ierr = PetscPrintf(comm,"Final time %8.5f, steps %D\n",(double)ptime,steps);CHKERRQ(ierr);
+    ierr = MPI_Allreduce(&mass_difference,&mass_differenceg,1,MPIU_SCALAR,MPIU_SUM,comm);CHKERRQ(ierr);
+    ierr = PetscPrintf(comm,"Mass difference %g\n",(double)mass_differenceg);CHKERRQ(ierr);
+    ierr = PetscPrintf(comm,"Final time %g, steps %D\n",(double)ptime,steps);CHKERRQ(ierr);
     if (ctx.exact) {
       PetscReal nrm1=0;
       ierr = SolutionErrorNorms(&ctx,da,ptime,X,&nrm1);CHKERRQ(ierr);
-      ierr = PetscPrintf(comm,"Error ||x-x_e||_1 %8.4e\n",(double)nrm1);CHKERRQ(ierr);
+      ierr = PetscPrintf(comm,"Error ||x-x_e||_1 %g\n",(double)nrm1);CHKERRQ(ierr);
     }
     if (ctx.simulation) {
       PetscReal         nrm1=0;
@@ -802,7 +802,7 @@ int main(int argc,char *argv[])
       }
       ierr = VecRestoreArrayRead(X,&ptr_X);CHKERRQ(ierr);
       ierr = VecRestoreArrayRead(XR,&ptr_XR);CHKERRQ(ierr);
-      ierr = PetscPrintf(comm,"Error ||x-x_e||_1 %8.4e\n",(double)nrm1);CHKERRQ(ierr);
+      ierr = PetscPrintf(comm,"Error ||x-x_e||_1 %g\n",(double)nrm1);CHKERRQ(ierr);
       ierr = VecDestroy(&XR);CHKERRQ(ierr);
     }
   }
@@ -832,6 +832,8 @@ int main(int argc,char *argv[])
   ierr = (*ctx.physics.destroy)(ctx.physics.user);CHKERRQ(ierr);
   for (i=0; i<ctx.physics.dof; i++) {ierr = PetscFree(ctx.physics.fieldname[i]);CHKERRQ(ierr);}
   ierr = PetscFree3(ctx.u,ctx.flux,ctx.speeds);CHKERRQ(ierr);
+  ierr = ISDestroy(&ctx.iss);CHKERRQ(ierr);
+  ierr = ISDestroy(&ctx.isf);CHKERRQ(ierr);
   ierr = VecDestroy(&X);CHKERRQ(ierr);
   ierr = VecDestroy(&X0);CHKERRQ(ierr);
   ierr = VecDestroy(&R);CHKERRQ(ierr);

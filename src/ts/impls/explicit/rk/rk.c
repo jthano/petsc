@@ -17,6 +17,8 @@ static TSRKType  TSRKDefault = TSRK3BS;
 static PetscBool TSRKRegisterAllCalled;
 static PetscBool TSRKPackageInitialized;
 
+static RKTableauLink RKTableauList;
+
 /*MC
      TSRK1FE - First order forward Euler scheme.
 
@@ -1027,7 +1029,8 @@ static PetscErrorCode TSDestroy_RK(TS ts)
 @*/
 PetscErrorCode TSRKSetMultirate(TS ts,PetscBool use_multirate)
 {
-  PetscTryMethod(ts,"TSRKSetMultirate_C",(TS,PetscBool),(ts,use_multirate));
+  PetscErrorCode ierr;
+  ierr = PetscTryMethod(ts,"TSRKSetMultirate_C",(TS,PetscBool),(ts,use_multirate));CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
@@ -1048,7 +1051,8 @@ PetscErrorCode TSRKSetMultirate(TS ts,PetscBool use_multirate)
 @*/
 PetscErrorCode TSRKGetMultirate(TS ts,PetscBool *use_multirate)
 {
-  PetscUseMethod(ts,"TSRKGetMultirate_C",(TS,PetscBool*),(ts,use_multirate));
+  PetscErrorCode ierr;
+  ierr = PetscUseMethod(ts,"TSRKGetMultirate_C",(TS,PetscBool*),(ts,use_multirate));CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
