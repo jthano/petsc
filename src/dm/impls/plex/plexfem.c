@@ -3474,3 +3474,4 @@ PetscErrorCode DMPlexComputeJacobian_Patch_Internal(DM dm, PetscSection section,
   CHKMEMQ;
   PetscFunctionReturn(0);
 }
+
