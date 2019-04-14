@@ -607,7 +607,7 @@ static PetscErrorCode SolutionStatsView(DM da,Vec X,PetscViewer viewer)
     ierr = VecMin(X,&imin,&xmin);CHKERRQ(ierr);
     ierr = VecMax(X,&imax,&xmax);CHKERRQ(ierr);
     ierr = VecSum(X,&sum);CHKERRQ(ierr);
-    ierr = PetscViewerASCIIPrintf(viewer,"Solution range [%g,%g] with extrema at %D and %D, mean %g, ||x||_TV %g\n",(double)xmin,(double)xmax,imin,imax,(double)(sum/Mx),(double)(tvgsum/Mx));CHKERRQ(ierr);
+    ierr = PetscViewerASCIIPrintf(viewer,"Solution range [%g,%g] with minimum at %D, mean %g, ||x||_TV %g\n",(double)xmin,(double)xmax,imin,(double)(sum/Mx),(double)(tvgsum/Mx));CHKERRQ(ierr);
   } else SETERRQ(PETSC_COMM_SELF,1,"Viewer type not supported");
   PetscFunctionReturn(0);
 }
@@ -759,8 +759,8 @@ int main(int argc,char *argv[])
     /* calculate the total mass at initial time and final time */
     mass_initial = 0.0;
     mass_final   = 0.0;
-    ierr = DMDAVecGetArrayRead(da,X0,&ptr_X0);CHKERRQ(ierr);
-    ierr = DMDAVecGetArrayRead(da,X,&ptr_X);CHKERRQ(ierr);
+    ierr = DMDAVecGetArrayRead(da,X0,(void*)&ptr_X0);CHKERRQ(ierr);
+    ierr = DMDAVecGetArrayRead(da,X,(void*)&ptr_X);CHKERRQ(ierr);
     for(i=0; i<Mx; i++) {
       if(i < count_slow/2 || i > count_slow/2+count_fast-1){
         mass_initial = mass_initial+hs*ptr_X0[i];
@@ -770,8 +770,8 @@ int main(int argc,char *argv[])
         mass_final = mass_final+hf*ptr_X[i];
       }
     }
-    ierr = DMDAVecRestoreArrayRead(da,X0,&ptr_X0);CHKERRQ(ierr);
-    ierr = DMDAVecRestoreArrayRead(da,X,&ptr_X);CHKERRQ(ierr);
+    ierr = DMDAVecRestoreArrayRead(da,X0,(void*)&ptr_X0);CHKERRQ(ierr);
+    ierr = DMDAVecRestoreArrayRead(da,X,(void*)&ptr_X);CHKERRQ(ierr);
     mass_difference = mass_final-mass_initial;
     ierr = MPI_Allreduce(&mass_difference,&mass_differenceg,1,MPIU_SCALAR,MPIU_SUM,comm);CHKERRQ(ierr);
     ierr = PetscPrintf(comm,"Mass difference %g\n",(double)mass_differenceg);CHKERRQ(ierr);
