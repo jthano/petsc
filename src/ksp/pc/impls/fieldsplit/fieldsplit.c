@@ -2134,7 +2134,7 @@ PetscErrorCode PCFieldSplitGetIS(PC pc,const char splitname[],IS *is)
 .seealso: PCFieldSplitGetSubKSP(), PCFIELDSPLIT, PCFieldSplitGetIS(), PCFieldSplitSetIS()
 
 @*/
-PetscErrorCode PCFieldSplitGetISByIndex(PC pc,const PetscInt index,IS *is)
+PetscErrorCode PCFieldSplitGetISByIndex(PC pc,PetscInt index,IS *is)
 {
   PetscErrorCode ierr;
 
