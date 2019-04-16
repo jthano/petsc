@@ -2127,7 +2127,7 @@ PetscErrorCode PCFieldSplitGetIS(PC pc,const char splitname[],IS *is)
 -   index - index of this split
 
     Output Parameter:
--   is - the index set that defines the vector elements in this field, or NULL if the field is not found
+-   is - the index set that defines the vector elements in this field
 
     Level: intermediate
 
