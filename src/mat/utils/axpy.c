@@ -395,7 +395,7 @@ PetscErrorCode  MatAYPX(Mat Y,PetscScalar a,Mat X,MatStructure str)
 }
 
 /*@
-    MatComputeExplicitOperator - Computes the explicit matrix
+    MatComputeOperator - Computes the explicit matrix
 
     Collective on Mat
 
@@ -415,7 +415,7 @@ PetscErrorCode  MatAYPX(Mat Y,PetscScalar a,Mat X,MatStructure str)
 
 .keywords: Mat, compute, explicit, operator
 @*/
-PetscErrorCode  MatComputeExplicitOperator(Mat inmat,MatType mattype,Mat *mat)
+PetscErrorCode  MatComputeOperator(Mat inmat,MatType mattype,Mat *mat)
 {
   PetscErrorCode ierr;
 
@@ -427,7 +427,7 @@ PetscErrorCode  MatComputeExplicitOperator(Mat inmat,MatType mattype,Mat *mat)
 }
 
 /*@
-    MatComputeExplicitOperatorTranspose - Computes the explicit matrix representation of
+    MatComputeOperatorTranspose - Computes the explicit matrix representation of
         a give matrix that can apply MatMultTranspose()
 
     Collective on Mat
@@ -447,7 +447,7 @@ PetscErrorCode  MatComputeExplicitOperator(Mat inmat,MatType mattype,Mat *mat)
 
 .keywords: Mat, compute, explicit, operator
 @*/
-PetscErrorCode  MatComputeExplicitOperatorTranspose(Mat inmat,MatType mattype,Mat *mat)
+PetscErrorCode  MatComputeOperatorTranspose(Mat inmat,MatType mattype,Mat *mat)
 {
   Mat            A;
   PetscErrorCode ierr;
