@@ -868,22 +868,23 @@ PetscErrorCode MatSolveTranspose_MUMPS(Mat A,Vec b,Vec x)
 
 PetscErrorCode MatMatSolve_MUMPS(Mat A,Mat B,Mat X)
 {
-  PetscErrorCode ierr;
-  Mat            Bt = NULL;
-  PetscBool      flg, flgT;
-  Mat_MUMPS      *mumps=(Mat_MUMPS*)A->data;
-  PetscInt       i,nrhs,M;
-  PetscScalar    *array,*bray;
-  PetscInt       lsol_loc,nlsol_loc,*isol_loc,*idxx,*isol_loc_save,iidx = 0;
-  MumpsScalar    *sol_loc,*sol_loc_save;
-  IS             is_to,is_from;
-  PetscInt       k,proc,j,m,myrstart;
-  const PetscInt *rstart;
-  Vec            v_mpi,b_seq,msol_loc;
-  VecScatter     scat_rhs,scat_sol;
-  PetscScalar    *aa;
-  PetscInt       spnr,*ia,*ja;
-  Mat_MPIAIJ     *b = NULL;
+  PetscErrorCode    ierr;
+  Mat               Bt = NULL;
+  PetscBool         flg, flgT;
+  Mat_MUMPS         *mumps=(Mat_MUMPS*)A->data;
+  PetscInt          i,nrhs,M;
+  PetscScalar       *array;
+  const PetscScalar *rbray;
+  PetscInt          lsol_loc,nlsol_loc,*isol_loc,*idxx,*isol_loc_save,iidx = 0;
+  MumpsScalar       *bray,*sol_loc,*sol_loc_save;
+  IS                is_to,is_from;
+  PetscInt          k,proc,j,m,myrstart;
+  const PetscInt    *rstart;
+  Vec               v_mpi,b_seq,msol_loc;
+  VecScatter        scat_rhs,scat_sol;
+  PetscScalar       *aa;
+  PetscInt          spnr,*ia,*ja;
+  Mat_MPIAIJ        *b = NULL;
 
   PetscFunctionBegin;
   ierr = PetscObjectTypeCompareAny((PetscObject)X,&flg,MATSEQDENSE,MATMPIDENSE,NULL);CHKERRQ(ierr);
@@ -917,9 +918,9 @@ PetscErrorCode MatMatSolve_MUMPS(Mat A,Mat B,Mat X)
 
     if (!Bt) { /* dense B */
       /* copy B to X */
-      ierr = MatDenseGetArray(B,&bray);CHKERRQ(ierr);
-      ierr = PetscMemcpy(array,bray,M*nrhs*sizeof(PetscScalar));CHKERRQ(ierr);
-      ierr = MatDenseRestoreArray(B,&bray);CHKERRQ(ierr);
+      ierr = MatDenseGetArrayRead(B,&rbray);CHKERRQ(ierr);
+      ierr = PetscMemcpy(array,rbray,M*nrhs*sizeof(PetscScalar));CHKERRQ(ierr);
+      ierr = MatDenseRestoreArrayRead(B,&rbray);CHKERRQ(ierr);
     } else { /* sparse B */
       ierr = MatSeqAIJGetArray(Bt,&aa);CHKERRQ(ierr);
       ierr = MatGetRowIJ(Bt,1,PETSC_FALSE,PETSC_FALSE,&spnr,(const PetscInt**)&ia,(const PetscInt**)&ja,&flg);CHKERRQ(ierr);
