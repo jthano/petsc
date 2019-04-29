@@ -1696,7 +1696,7 @@ static PetscErrorCode PetscPartitionerView_ParMetis(PetscPartitioner part, Petsc
 static PetscErrorCode PetscPartitionerSetFromOptions_ParMetis(PetscOptionItems *PetscOptionsObject, PetscPartitioner part)
 {
   PetscPartitioner_ParMetis *p = (PetscPartitioner_ParMetis *) part->data;
-  PetscInt                  p_randomSeed = 0; /* TODO: Add this to PetscPartitioner_ParMetis */
+  PetscInt                  p_randomSeed = -1; /* TODO: Add this to PetscPartitioner_ParMetis */
   PetscErrorCode            ierr;
 
   PetscFunctionBegin;
@@ -1735,7 +1735,7 @@ static PetscErrorCode PetscPartitionerPartition_ParMetis(PetscPartitioner part, 
   /* Outputs */
   PetscInt       v, i, *assignment, *points;
   PetscMPIInt    size, rank, p;
-  PetscInt       pm_randomSeed = 0;
+  PetscInt       pm_randomSeed = -1;
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
@@ -1804,7 +1804,7 @@ static PetscErrorCode PetscPartitionerPartition_ParMetis(PetscPartitioner part, 
     } else {
       options[0] = 1; /*use options */
       options[1] = pm->debugFlag;
-      options[2] = pm_randomSeed;
+      options[2] = (pm_randomSeed == -1) ? 15 : pm_randomSeed; /* default is GLOBAL_SEED=15 from `libparmetis/defs.h` */
       PetscStackPush("ParMETIS_V3_PartKway");
       ierr = ParMETIS_V3_PartKway(vtxdist, xadj, adjncy, vwgt, adjwgt, &wgtflag, &numflag, &ncon, &nparts, tpwgts, ubvec, options, &part->edgeCut, assignment, &comm);
       PetscStackPop;
