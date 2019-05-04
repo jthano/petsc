@@ -21,20 +21,6 @@ class Configure(config.base.Configure):
 
   def setupDependencies(self, framework):
     config.base.Configure.setupDependencies(self, framework)
-    self.setCompilers = framework.require('config.setCompilers', self)
-    return
-
-  def checkCompileCSource(self):
-    '''Check if Cxx compiler can compile .c sources as C++'''
-    includeLine = 'template <class T>\nT foo(T a) {return a;}'
-    ext_sav = self.framework.getCompilerObject('Cxx').sourceExtension
-    self.framework.getCompilerObject('Cxx').sourceExtension = '.c'
-    try:
-      self.setCompilers.checkCompiler('Cxx', includes = includeLine)
-    except RuntimeError as e:
-      self.logPrint('Error message from compiling {'+str(e)+'}', 4, 'compilers')
-      raise RuntimeError('Unable to compile .c sources with C++ compiler. This is required to build PETSc with --with-clanguage=C++ option!')
-    self.framework.getCompilerObject('Cxx').sourceExtension = ext_sav
     return
 
   def configureCLanguage(self):
@@ -43,7 +29,6 @@ class Configure(config.base.Configure):
     if not self.clanguage in ['C', 'Cxx']:
       raise RuntimeError('Invalid C language specified: '+str(self.clanguage))
     if self.clanguage == 'Cxx':
-      self.checkCompileCSource()
       self.logPrintBox('WARNING -with-clanguage=C++ is a developer feature and is *not* required for regular usage of PETSc either from C or C++')
     self.logPrint('C language is '+str(self.clanguage))
     self.addDefine('CLANGUAGE_'+self.clanguage.upper(),'1')

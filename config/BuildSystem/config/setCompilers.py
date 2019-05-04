@@ -818,14 +818,13 @@ class Configure(config.base.Configure):
         del self.argDB['CXX']
       return
     self.mesg = ''
-    includeLine = 'template <class T>\nT foo(T a) {return a;}'
     for compiler in self.generateCxxCompilerGuesses():
       # Determine an acceptable extensions for the C++ compiler
       for ext in ['.cc', '.cpp', '.C']:
         self.framework.getCompilerObject('Cxx').sourceExtension = ext
         try:
           if self.getExecutable(compiler, resultName = 'CXX'):
-            self.checkCompiler('Cxx', includes = includeLine)
+            self.checkCompiler('Cxx')
             break
         except RuntimeError as e:
           import os
