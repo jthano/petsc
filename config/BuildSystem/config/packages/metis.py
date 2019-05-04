@@ -3,7 +3,8 @@ import config.package
 class Configure(config.package.CMakePackage):
   def __init__(self, framework):
     config.package.CMakePackage.__init__(self, framework)
-    self.gitcommit         = 'v5.1.0-p5'
+    self.gitcommit         = 'v5.1.0-p5' # XXX update
+    self.gitcommit         = '3240f52eb8ee5da1a96acd6e1edd2d2b0995bde9' # XXX remove
     self.download          = ['git://https://bitbucket.org/petsc/pkg-metis.git','https://bitbucket.org/petsc/pkg-metis/get/'+self.gitcommit+'.tar.gz']
     self.downloaddirnames  = ['petsc-pkg-metis']
     self.functions         = ['METIS_PartGraphKway']
