@@ -71,3 +71,11 @@ implicit none
   call PetscFinalize(ierr);CHKERRA(ierr)
   
 end program
+
+!/*TEST
+!
+!     test:
+!       nsize: 2
+!       output_file: output/ex16_1.out
+!
+!TEST*/
