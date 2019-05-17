@@ -270,9 +270,13 @@ PETSC_EXTERN PetscErrorCode MatScatterGetVecScatter(Mat,VecScatter*);
 PETSC_EXTERN PetscErrorCode MatCreateBlockMat(MPI_Comm,PetscInt,PetscInt,PetscInt,PetscInt,PetscInt*,Mat*);
 PETSC_EXTERN PetscErrorCode MatCompositeAddMat(Mat,Mat);
 PETSC_EXTERN PetscErrorCode MatCompositeMerge(Mat);
+PETSC_EXTERN PetscErrorCode MatCompositeSetMergeFromRight(Mat,PetscBool);
 PETSC_EXTERN PetscErrorCode MatCreateComposite(MPI_Comm,PetscInt,const Mat*,Mat*);
 typedef enum {MAT_COMPOSITE_ADDITIVE,MAT_COMPOSITE_MULTIPLICATIVE} MatCompositeType;
 PETSC_EXTERN PetscErrorCode MatCompositeSetType(Mat,MatCompositeType);
+PETSC_EXTERN PetscErrorCode MatCompositeGetType(Mat,MatCompositeType*);
+PETSC_EXTERN PetscErrorCode MatCompositeGetNmat(Mat,PetscInt*);
+PETSC_EXTERN PetscErrorCode MatCompositeGetMat(Mat,PetscInt,Mat*);
 
 PETSC_EXTERN PetscErrorCode MatCreateFFT(MPI_Comm,PetscInt,const PetscInt[],MatType,Mat*);
 PETSC_EXTERN PetscErrorCode MatCreateSeqCUFFT(MPI_Comm,PetscInt,const PetscInt[],Mat*);
