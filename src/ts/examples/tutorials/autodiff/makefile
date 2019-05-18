@@ -9,7 +9,7 @@ EXAMPLESCXX     = adr_ex1.cxx adr_ex5adj.cxx adr_ex5adj_mf.cxx ex16adj.cxx ex16a
 EXAMPLESF       =
 MANSEC          = TS
 DIRS            =
-CLEANFILES      = TS-data-* *.tap
+CLEANFILES      = SA-data/* *.tap
 
 LIB             = ${PETSC_TS_LIB}
 
