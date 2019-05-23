@@ -934,15 +934,6 @@ static PetscErrorCode PCSetFromOptions_HYPRE_BoomerAMG(PetscOptionItems *PetscOp
     PetscStackCallStandard(HYPRE_BoomerAMGSetSmoothNumLevels,(jac->hsolver,jac->nodal_relax_levels));
   }
 
-  /*
-   *   double strongthreshold_R;
-  double filter_tol_A;
-  double post_filter_tol_R;
-  double distance_R;
-  int sabs_flag;
-   */
-
-
   ierr = PetscOptionsScalar("-pc_hypre_boomeramg_strongthreshold_R",
 		  "Strenght of Connection parameter for the matrix from which the restriction weights are built",
 		  "None",jac->strongthreshold_R,&jac->strongthreshold_R,&flg);CHKERRQ(ierr);
@@ -1002,14 +993,14 @@ static PetscErrorCode PCSetFromOptions_HYPRE_BoomerAMG(PetscOptionItems *PetscOp
 
 	  for (unsigned int i=0; i<ns_down; i++){
 		  if (prerelax[i]=='F') jac->grid_relax_points[1][i] = -1;
-		  else if (prerelax[i]=='C') jac->grid_relax_points[1][i] = -1;
+		  else if (prerelax[i]=='C') jac->grid_relax_points[1][i] = 1;
 		  else if (prerelax[i]=='A') jac->grid_relax_points[1][i] = 0;
 		  else /*TODO: Error*/;
 	  }
 
 	  for (unsigned int i=0;i<ns_up;i++){
 		  if (postrelax[i]=='F') jac->grid_relax_points[2][i] = -1;
-		  else if (postrelax[i]=='C') jac->grid_relax_points[2][i] = -1;
+		  else if (postrelax[i]=='C') jac->grid_relax_points[2][i] = 1;
 		  else if (postrelax[i]=='A') jac->grid_relax_points[2][i] = 0;
 		  else /*TODO: Error*/;
 	  }
