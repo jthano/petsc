@@ -289,8 +289,7 @@ static PetscErrorCode PCSetUp_HYPRE(PC pc)
       jac->n_hmnull = nvec;
     }
 
-    printf("block size is %d \n",jac->diag_scaling_block_size);
-    fflush(stdout);
+
     // block diagonal prescaling
     if (jac->diag_scaling_block_size>0){
 
@@ -298,28 +297,16 @@ static PetscErrorCode PCSetUp_HYPRE(PC pc)
   	  HYPRE_ParCSRMatrix hmat; /* typedef struct hypre_ParCSRMatrix_struct *HYPRE_ParCSRMatrix; */
   	  HYPRE_ParVector    bv; /* typedef struct hypre_ParVector_struct *HYPRE_ParVector; */
 
-  	  // get the underlying structure
-  	  //hjac = (Mat_HYPRE*)(jac->hpmat->data);
-  	  printf("Getting pointer to underlying CSR pointer\n");
-  	  fflush(stdout);
-
   	  PetscStackCallStandard(HYPRE_IJMatrixGetObject,(hjac->ij,(void**)&hmat));
   	  PetscStackCallStandard(HYPRE_IJVectorGetObject,(hjac->b,(void**)&bv));
 
-  	  printf("Calling scaling routine\n");
-  	  fflush(stdout);
-
-  	  //call routines to perform scalingß
+  	  //call routines to perform scaling
   	  PetscStackCallStandard(hypre_ParcsrBdiagInvScal,(hmat,jac->diag_scaling_block_size, &A_scaled));
   	  PetscStackCallStandard(hypre_ParvecBdiagInvScal,(bv,jac->diag_scaling_block_size,&b_scaled, hmat));
 
-  	  printf("Scaling routine has returned\n");
-  	  fflush(stdout);
-
   	  // now have pointers to new persistent data, A_scaled and b_scaled,
   	  // destroy old data and move pointers to new data
-  	  //*bv = *b_scaled;
-  	  //*hmat = *A_scaled;
+  	  //
   	  PetscStackCallStandard(HYPRE_IJMatrixDestroy,(hjac->ij));
   	  PetscStackCallStandard(HYPRE_IJVectorDestroy,(hjac->b));
   	  hjac->inner_free=PETSC_FALSE;
