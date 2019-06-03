@@ -83,7 +83,9 @@ typedef struct {
   double distance_R;
   int sabs_flag;
   /*This is for handling relaxation with AIR*/
-  int * grid_relax_points[4];
+  int ** grid_relax_points;
+  //*This is not a parameter pasted to hypre, but is instead used to specify prescaling
+  int diag_scaling_block_size;
 
   PetscInt  nodal_coarsening;
   PetscInt  nodal_coarsening_diag;
@@ -228,6 +230,9 @@ static PetscErrorCode PCSetUp_HYPRE(PC pc)
   HYPRE_ParVector    bv,xv;
   PetscBool          ishypre;
   PetscErrorCode     ierr;
+  // These pointers will be used as output by hypre
+  HYPRE_ParCSRMatrix  A_scaled; /* typedef struct hypre_ParCSRMatrix_struct *HYPRE_ParCSRMatrix; */
+  HYPRE_ParVector    b_scaled; /* typedef struct hypre_ParVector_struct *HYPRE_ParVector; */
 
   PetscFunctionBegin;
   if (!jac->hypre_type) {
@@ -283,6 +288,81 @@ static PetscErrorCode PCSetUp_HYPRE(PC pc)
       PetscStackCallStandard(HYPRE_BoomerAMGSetInterpVectors,(jac->hsolver,nvec,jac->phmnull));
       jac->n_hmnull = nvec;
     }
+
+    printf("block size is %d \n",jac->diag_scaling_block_size);
+    fflush(stdout);
+    // block diagonal prescaling
+    if (jac->diag_scaling_block_size>0){
+
+  	  // underlying ParCSR data structures for the IJ structure
+  	  HYPRE_ParCSRMatrix hmat; /* typedef struct hypre_ParCSRMatrix_struct *HYPRE_ParCSRMatrix; */
+  	  HYPRE_ParVector    bv; /* typedef struct hypre_ParVector_struct *HYPRE_ParVector; */
+
+  	  // get the underlying structure
+  	  //hjac = (Mat_HYPRE*)(jac->hpmat->data);
+  	  printf("Getting pointer to underlying CSR pointer\n");
+  	  fflush(stdout);
+
+  	  PetscStackCallStandard(HYPRE_IJMatrixGetObject,(hjac->ij,(void**)&hmat));
+  	  PetscStackCallStandard(HYPRE_IJVectorGetObject,(hjac->b,(void**)&bv));
+
+  	  printf("Calling scaling routine\n");
+  	  fflush(stdout);
+
+  	  //call routines to perform scalingß
+  	  PetscStackCallStandard(hypre_ParcsrBdiagInvScal,(hmat,jac->diag_scaling_block_size, &A_scaled));
+  	  PetscStackCallStandard(hypre_ParvecBdiagInvScal,(bv,jac->diag_scaling_block_size,&b_scaled, hmat));
+
+  	  printf("Scaling routine has returned\n");
+  	  fflush(stdout);
+
+  	  // now have pointers to new persistent data, A_scaled and b_scaled,
+  	  // destroy old data and move pointers to new data
+  	  //*bv = *b_scaled;
+  	  //*hmat = *A_scaled;
+  	  PetscStackCallStandard(HYPRE_IJMatrixDestroy,(hjac->ij));
+  	  PetscStackCallStandard(HYPRE_IJVectorDestroy,(hjac->b));
+  	  hjac->inner_free=PETSC_FALSE;
+
+  	  /* Code to create new ij matrix taken from MatCreateFromParCSR routine in myhypre.c*/
+  	  PetscInt              rstart,rend,cstart,cend,M,N;
+  	  MPI_Comm              comm;
+  	  /* access ParCSRMatrix */
+  	  rstart = hypre_ParCSRMatrixFirstRowIndex(A_scaled);
+  	  rend   = hypre_ParCSRMatrixLastRowIndex(A_scaled);
+  	  cstart = hypre_ParCSRMatrixFirstColDiag(A_scaled);
+  	  cend   = hypre_ParCSRMatrixLastColDiag(A_scaled);
+  	  M      = hypre_ParCSRMatrixGlobalNumRows(A_scaled);
+  	  N      = hypre_ParCSRMatrixGlobalNumCols(A_scaled);
+
+  	  /* fix for empty local rows/columns */
+  	  if (rend < rstart) rend = rstart;
+  	  if (cend < cstart) cend = cstart;
+
+  	  /* PETSc convention */
+  	  rend++;
+  	  cend++;
+  	  rend = PetscMin(rend,M);
+  	  cend = PetscMin(cend,N);
+
+  	  /* create HYPRE_IJMatrix */
+  	  PetscStackCallStandard(HYPRE_IJMatrixCreate,(hjac->comm,rstart,rend-1,cstart,cend-1,&hjac->ij));
+  	  PetscStackCallStandard(HYPRE_IJMatrixSetObjectType,(hjac->ij,HYPRE_PARCSR));
+  	  hypre_IJMatrixObject(hjac->ij) = A_scaled;
+  	  /* set assembled flag */
+  	  hypre_IJMatrixAssembleFlag(hjac->ij) = 1;
+  	  PetscStackCallStandard(HYPRE_IJMatrixInitialize,(hjac->ij));
+
+  	  /* create the HYPRE_IJVector*/
+  	  PetscStackCallStandard(HYPRE_IJVectorCreate,(hjac->comm,cstart,cend-1,&hjac->b));
+  	  PetscStackCallStandard(HYPRE_IJVectorSetObjectType,(hjac->b,HYPRE_PARCSR));
+  	  hypre_IJVectorObject(hjac->b) = b_scaled;
+  	  //hypre_IJVectorAssembleFlag(hjac->b) = 1;
+  	  PetscStackCallStandard(HYPRE_IJVectorInitialize,(hjac->b));
+
+    }
+
+
   }
 
   /* special case for AMS */
@@ -483,6 +563,8 @@ static PetscErrorCode PCReset_HYPRE(PC pc)
   jac->ams_beta_is_zero = PETSC_FALSE;
   jac->dim = 0;
   PetscFunctionReturn(0);
+
+
 }
 
 static PetscErrorCode PCDestroy_HYPRE(PC pc)
@@ -491,6 +573,7 @@ static PetscErrorCode PCDestroy_HYPRE(PC pc)
   PetscErrorCode           ierr;
 
   PetscFunctionBegin;
+
   ierr = PCReset_HYPRE(pc);CHKERRQ(ierr);
   if (jac->destroy) PetscStackCallStandard(jac->destroy,(jac->hsolver));
   ierr = PetscFree(jac->hypre_type);CHKERRQ(ierr);
@@ -519,6 +602,7 @@ static PetscErrorCode PCSetFromOptions_HYPRE_Pilut(PetscOptionItems *PetscOption
   PetscBool      flag;
 
   PetscFunctionBegin;
+
   ierr = PetscOptionsHead(PetscOptionsObject,"HYPRE Pilut Options");CHKERRQ(ierr);
   ierr = PetscOptionsInt("-pc_hypre_pilut_maxiter","Number of iterations","None",jac->maxiter,&jac->maxiter,&flag);CHKERRQ(ierr);
   if (flag) PetscStackCallStandard(HYPRE_ParCSRPilutSetMaxIter,(jac->hsolver,jac->maxiter));
@@ -654,9 +738,6 @@ static PetscErrorCode PCSetFromOptions_HYPRE_BoomerAMG(PetscOptionItems *PetscOp
   double         tmpdbl, twodbl[2];
 
   PetscFunctionBegin;
-
-  printf("NEW VERSION OF THE CODE!!!!!!!!!!!!! \n");
-  fflush(stdout);
 
   ierr = PetscOptionsHead(PetscOptionsObject,"HYPRE BoomerAMG Options");CHKERRQ(ierr);
   ierr = PetscOptionsEList("-pc_hypre_boomeramg_cycle_type","Cycle type","None",HYPREBoomerAMGCycleType+1,2,HYPREBoomerAMGCycleType[jac->cycletype],&indx,&flg);CHKERRQ(ierr);
@@ -821,9 +902,9 @@ static PetscErrorCode PCSetFromOptions_HYPRE_BoomerAMG(PetscOptionItems *PetscOp
     jac->relaxtype[0] = jac->relaxtype[1]  = indx;
     PetscStackCallStandard(HYPRE_BoomerAMGSetRelaxType,(jac->hsolver, indx));
     /* by default, coarse type set to 9 */
-    jac->relaxtype[2] = 9;
-    PetscStackCallStandard(HYPRE_BoomerAMGSetCycleRelaxType,(jac->hsolver, 9, 3));
-  }
+    //jac->relaxtype[2] = 9;
+    //PetscStackCallStandard(HYPRE_BoomerAMGSetCycleRelaxType,(jac->hsolver, 9, 3));
+  }/*
   ierr = PetscOptionsEList("-pc_hypre_boomeramg_relax_type_down","Relax type for the down cycles","None",HYPREBoomerAMGRelaxType,ALEN(HYPREBoomerAMGRelaxType),HYPREBoomerAMGRelaxType[6],&indx,&flg);CHKERRQ(ierr);
   if (flg) {
     jac->relaxtype[0] = indx;
@@ -838,7 +919,7 @@ static PetscErrorCode PCSetFromOptions_HYPRE_BoomerAMG(PetscOptionItems *PetscOp
   if (flg) {
     jac->relaxtype[2] = indx;
     PetscStackCallStandard(HYPRE_BoomerAMGSetCycleRelaxType,(jac->hsolver, indx, 3));
-  }
+  }*/
 
   /* Relaxation Weight */
   ierr = PetscOptionsReal("-pc_hypre_boomeramg_relax_weight_all","Relaxation weight for all levels (0 = hypre estimates, -k = determined with k CG steps)","None",jac->relaxweight, &tmpdbl,&flg);CHKERRQ(ierr);
@@ -966,19 +1047,26 @@ static PetscErrorCode PCSetFromOptions_HYPRE_BoomerAMG(PetscOptionItems *PetscOp
 		  "If 0 SOC test for coarsening is based on the negative value of the matrix coefficients, if 1 test is based on the absolute value",
 		  "None",jac->sabs_flag,&jac->sabs_flag,&flg);CHKERRQ(ierr);
   if (flg) {
-    PetscStackCallStandard(HYPRE_BoomerAMGSetRestriction,(jac->hsolver,jac->sabs_flag));
+    PetscStackCallStandard(HYPRE_BoomerAMGSetSabs,(jac->hsolver,jac->sabs_flag));
   }
 
-  char prerelax[100];
-  char postrelax[100];
+  ierr = PetscOptionsInt("-pc_hypre_boomeramg_diag_scaling_block_size",
+		  "If set to a nonzero value, block-diagonal scaling is activated, with a block size specified by this parameter",
+		  "None",jac->diag_scaling_block_size,&jac->diag_scaling_block_size,&flg);CHKERRQ(ierr);
+
+
+  const int size_of_relax_string=20;
+
+  char prerelax[size_of_relax_string];
+  char postrelax[size_of_relax_string];
 
   PetscBool flg_pre_relax, flg_post_relax;
 
   ierr = PetscOptionsString("-pc_hypre_boomeramg_prerelax",
-		  "","None",prerelax,prerelax,100,&flg_pre_relax);CHKERRQ(ierr);
+		  "","None",prerelax,prerelax,size_of_relax_string,&flg_pre_relax);CHKERRQ(ierr);
 
   ierr = PetscOptionsString("-pc_hypre_boomeramg_postrelax",
-		  "","None",postrelax,postrelax,100,&flg_post_relax);CHKERRQ(ierr);
+		  "","None",postrelax,postrelax,size_of_relax_string,&flg_post_relax);CHKERRQ(ierr);
 
   if (flg_pre_relax && flg_post_relax){
 
@@ -1899,7 +1987,6 @@ static PetscErrorCode  PCHYPRESetType_HYPRE(PC pc,const char name[])
     jac->interptype       = 0;
     jac->agg_nl           = 0;
     jac->pmax             = 0;
-    jac->truncfactor      = 0.0;
     jac->agg_num_paths    = 1;
 
     jac->nodal_coarsening      = 0;
@@ -1916,7 +2003,9 @@ static PetscErrorCode  PCHYPRESetType_HYPRE(PC pc,const char name[])
     jac->post_filter_tol_R=0.0;
     jac->distance_R=0.0; /*AIR AMG not on by default*/
     jac->sabs_flag=0;
+    jac->grid_relax_points = (int **) malloc(4*sizeof(int*));
     for (unsigned int i=0;i<4;++i)jac->grid_relax_points[i]=NULL;
+    jac->diag_scaling_block_size = 0;/* */
 
     PetscStackCallStandard(HYPRE_BoomerAMGSetCycleType,(jac->hsolver,jac->cycletype));
     PetscStackCallStandard(HYPRE_BoomerAMGSetMaxLevels,(jac->hsolver,jac->maxlevels));
@@ -2677,4 +2766,5 @@ PETSC_EXTERN PetscErrorCode PCCreate_SysPFMG(PC pc)
   PetscStackCallStandard(HYPRE_SStructSysPFMGCreate,(ex->hcomm,&ex->ss_solver));
   PetscFunctionReturn(0);
 }
+
 
