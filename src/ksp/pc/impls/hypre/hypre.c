@@ -1003,7 +1003,7 @@ static PetscErrorCode PCSetFromOptions_HYPRE_BoomerAMG(PetscOptionItems *PetscOp
   }
 
   ierr = PetscOptionsScalar("-pc_hypre_boomeramg_strongthreshold_R",
-		  "Strenght of Connection parameter for the matrix from which the restriction weights are built",
+		  "Strength of Connection parameter for the matrix from which the restriction weights are built",
 		  "None",jac->strongthreshold_R,&jac->strongthreshold_R,&flg);CHKERRQ(ierr);
   if (flg) {
     PetscStackCallStandard(HYPRE_BoomerAMGSetStrongThresholdR,(jac->hsolver,jac->strongthreshold_R));
@@ -1024,7 +1024,10 @@ static PetscErrorCode PCSetFromOptions_HYPRE_BoomerAMG(PetscOptionItems *PetscOp
   }
 
   ierr = PetscOptionsScalar("-pc_hypre_boomeramg_distance_R",
-		  "Threshold for removing coefficients from R",
+		  "When set to 0.0, Approximate Ideal Restriction (AIR) AMG is not activated. When set to a value greater than 0.0,\n"
+		  "this parameter activates AIR AMG and specifies the distance used for building R. 1.0 specifies distance-1 which means immediate F-point\n"
+		  "neighbors are considered. A value of 2.0 specifies that F-points connected to immediate F-point neighboors also be considered. A value of\n"
+		  "3.0 uses a 0 degree Neumann series to approximate R_ideal. Values of 4.0 and 5.0 specify use of 1st and 2nd degree truncations respectively.",
 		  "None",jac->distance_R,&jac->distance_R,&flg);CHKERRQ(ierr);
   if (flg) {
     PetscStackCallStandard(HYPRE_BoomerAMGSetRestriction,(jac->hsolver,jac->distance_R));
@@ -1050,7 +1053,7 @@ static PetscErrorCode PCSetFromOptions_HYPRE_BoomerAMG(PetscOptionItems *PetscOp
   PetscBool flg_pre_relax, flg_post_relax;
 
   ierr = PetscOptionsString("-pc_hypre_boomeramg_prerelax",
-		  "","None",prerelax,prerelax,size_of_relax_string,&flg_pre_relax);CHKERRQ(ierr);
+		  "Specifies the grid points and ","None",prerelax,prerelax,size_of_relax_string,&flg_pre_relax);CHKERRQ(ierr);
 
   ierr = PetscOptionsString("-pc_hypre_boomeramg_postrelax",
 		  "","None",postrelax,postrelax,size_of_relax_string,&flg_post_relax);CHKERRQ(ierr);
