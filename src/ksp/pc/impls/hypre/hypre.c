@@ -14,6 +14,8 @@
 #include <_hypre_parcsr_ls.h>
 #include <petscmathypre.h>
 
+#include <petscsys.h>
+
 static PetscBool cite = PETSC_FALSE;
 static const char hypreCitation[] = "@manual{hypre-web-page,\n  title  = {{\\sl hypre}: High Performance Preconditioners},\n  organization = {Lawrence Livermore National Laboratory},\n  note  = {\\url{https://computation.llnl.gov/projects/hypre-scalable-linear-solvers-multigrid-methods}}\n}\n";
 
@@ -290,64 +292,149 @@ static PetscErrorCode PCSetUp_HYPRE(PC pc)
     }
 
 
-    // block diagonal prescaling
-    if (jac->diag_scaling_block_size>0){
+//    // block diagonal prescaling
+//    if (jac->diag_scaling_block_size>0){
+//
+//  	  // underlying ParCSR data structures for the IJ structure
+//  	  HYPRE_ParCSRMatrix hmat; /* typedef struct hypre_ParCSRMatrix_struct *HYPRE_ParCSRMatrix; */
+//  	  HYPRE_ParVector    bv; /* typedef struct hypre_ParVector_struct *HYPRE_ParVector; */
+//
+//  	  PetscStackCallStandard(HYPRE_IJMatrixGetObject,(hjac->ij,(void**)&hmat));
+//  	  PetscStackCallStandard(HYPRE_IJVectorGetObject,(hjac->b,(void**)&bv));
+//
+//  	  //call routines to perform scaling
+//  	  PetscStackCallStandard(hypre_ParcsrBdiagInvScal,(hmat,jac->diag_scaling_block_size, &A_scaled));
+//  	  PetscStackCallStandard(hypre_ParvecBdiagInvScal,(bv,jac->diag_scaling_block_size,&b_scaled, hmat));
+//
+//  	  // now have pointers to new persistent data, A_scaled and b_scaled,
+//  	  // destroy old data and move pointers to new data
+//  	  //
+//  	  PetscStackCallStandard(HYPRE_IJMatrixDestroy,(hjac->ij));
+//  	  PetscStackCallStandard(HYPRE_IJVectorDestroy,(hjac->b));
+//  	  hjac->inner_free=PETSC_FALSE;
+//
+//  	  /* Code to create new ij matrix taken from MatCreateFromParCSR routine in myhypre.c*/
+//  	  PetscInt              rstart,rend,cstart,cend,M,N;
+//  	  MPI_Comm              comm;
+//  	  /* access ParCSRMatrix */
+//  	  rstart = hypre_ParCSRMatrixFirstRowIndex(A_scaled);
+//  	  rend   = hypre_ParCSRMatrixLastRowIndex(A_scaled);
+//  	  cstart = hypre_ParCSRMatrixFirstColDiag(A_scaled);
+//  	  cend   = hypre_ParCSRMatrixLastColDiag(A_scaled);
+//  	  M      = hypre_ParCSRMatrixGlobalNumRows(A_scaled);
+//  	  N      = hypre_ParCSRMatrixGlobalNumCols(A_scaled);
+//
+//  	  /* fix for empty local rows/columns */
+//  	  if (rend < rstart) rend = rstart;
+//  	  if (cend < cstart) cend = cstart;
+//
+//  	  /* PETSc convention */
+//  	  rend++;
+//  	  cend++;
+//  	  rend = PetscMin(rend,M);
+//  	  cend = PetscMin(cend,N);
+//
+//  	  /* create HYPRE_IJMatrix */
+//  	  PetscStackCallStandard(HYPRE_IJMatrixCreate,(hjac->comm,rstart,rend-1,cstart,cend-1,&hjac->ij));
+//  	  PetscStackCallStandard(HYPRE_IJMatrixSetObjectType,(hjac->ij,HYPRE_PARCSR));
+//  	  hypre_IJMatrixObject(hjac->ij) = A_scaled;
+//  	  /* set assembled flag */
+//  	  hypre_IJMatrixAssembleFlag(hjac->ij) = 1;
+//  	  PetscStackCallStandard(HYPRE_IJMatrixInitialize,(hjac->ij));
+//
+//  	  /* create the HYPRE_IJVector*/
+//  	  PetscStackCallStandard(HYPRE_IJVectorCreate,(hjac->comm,cstart,cend-1,&hjac->b));
+//  	  PetscStackCallStandard(HYPRE_IJVectorSetObjectType,(hjac->b,HYPRE_PARCSR));
+//  	  hypre_IJVectorObject(hjac->b) = b_scaled;
+//  	  //hypre_IJVectorAssembleFlag(hjac->b) = 1;
+//  	  PetscStackCallStandard(HYPRE_IJVectorInitialize,(hjac->b));
+//
+//    }
 
-  	  // underlying ParCSR data structures for the IJ structure
-  	  HYPRE_ParCSRMatrix hmat; /* typedef struct hypre_ParCSRMatrix_struct *HYPRE_ParCSRMatrix; */
-  	  HYPRE_ParVector    bv; /* typedef struct hypre_ParVector_struct *HYPRE_ParVector; */
 
-  	  PetscStackCallStandard(HYPRE_IJMatrixGetObject,(hjac->ij,(void**)&hmat));
-  	  PetscStackCallStandard(HYPRE_IJVectorGetObject,(hjac->b,(void**)&bv));
+        // block diagonal prescaling
+        if (jac->diag_scaling_block_size>0){
 
-  	  //call routines to perform scaling
-  	  PetscStackCallStandard(hypre_ParcsrBdiagInvScal,(hmat,jac->diag_scaling_block_size, &A_scaled));
-  	  PetscStackCallStandard(hypre_ParvecBdiagInvScal,(bv,jac->diag_scaling_block_size,&b_scaled, hmat));
+      	  // underlying ParCSR data structures for the IJ structure
+      	  HYPRE_ParCSRMatrix hmat; /* typedef struct hypre_ParCSRMatrix_struct *HYPRE_ParCSRMatrix; */
+      	  HYPRE_ParVector    bv; /* typedef struct hypre_ParVector_struct *HYPRE_ParVector; */
 
-  	  // now have pointers to new persistent data, A_scaled and b_scaled,
-  	  // destroy old data and move pointers to new data
-  	  //
-  	  PetscStackCallStandard(HYPRE_IJMatrixDestroy,(hjac->ij));
-  	  PetscStackCallStandard(HYPRE_IJVectorDestroy,(hjac->b));
-  	  hjac->inner_free=PETSC_FALSE;
+      	  PetscStackCallStandard(HYPRE_IJMatrixGetObject,(hjac->ij,(void**)&hmat));
+      	  PetscStackCallStandard(HYPRE_IJVectorGetObject,(hjac->b,(void**)&bv));
 
-  	  /* Code to create new ij matrix taken from MatCreateFromParCSR routine in myhypre.c*/
-  	  PetscInt              rstart,rend,cstart,cend,M,N;
-  	  MPI_Comm              comm;
-  	  /* access ParCSRMatrix */
-  	  rstart = hypre_ParCSRMatrixFirstRowIndex(A_scaled);
-  	  rend   = hypre_ParCSRMatrixLastRowIndex(A_scaled);
-  	  cstart = hypre_ParCSRMatrixFirstColDiag(A_scaled);
-  	  cend   = hypre_ParCSRMatrixLastColDiag(A_scaled);
-  	  M      = hypre_ParCSRMatrixGlobalNumRows(A_scaled);
-  	  N      = hypre_ParCSRMatrixGlobalNumCols(A_scaled);
+      	  //call routines to perform scaling
+      	  ///PetscStackCallStandard(hypre_ParcsrBdiagInvScal,(hmat,jac->diag_scaling_block_size, &A_scaled));
 
-  	  /* fix for empty local rows/columns */
-  	  if (rend < rstart) rend = rstart;
-  	  if (cend < cstart) cend = cstart;
 
-  	  /* PETSc convention */
-  	  rend++;
-  	  cend++;
-  	  rend = PetscMin(rend,M);
-  	  cend = PetscMin(cend,N);
+          Vec block_scaling;
 
-  	  /* create HYPRE_IJMatrix */
-  	  PetscStackCallStandard(HYPRE_IJMatrixCreate,(hjac->comm,rstart,rend-1,cstart,cend-1,&hjac->ij));
-  	  PetscStackCallStandard(HYPRE_IJMatrixSetObjectType,(hjac->ij,HYPRE_PARCSR));
-  	  hypre_IJMatrixObject(hjac->ij) = A_scaled;
-  	  /* set assembled flag */
-  	  hypre_IJMatrixAssembleFlag(hjac->ij) = 1;
-  	  PetscStackCallStandard(HYPRE_IJMatrixInitialize,(hjac->ij));
+          PetscObjectQuery( (PetscObject) pc->pmat, "block_scaling_vector",(PetscObject *) &block_scaling);
 
-  	  /* create the HYPRE_IJVector*/
-  	  PetscStackCallStandard(HYPRE_IJVectorCreate,(hjac->comm,cstart,cend-1,&hjac->b));
-  	  PetscStackCallStandard(HYPRE_IJVectorSetObjectType,(hjac->b,HYPRE_PARCSR));
-  	  hypre_IJVectorObject(hjac->b) = b_scaled;
-  	  //hypre_IJVectorAssembleFlag(hjac->b) = 1;
-  	  PetscStackCallStandard(HYPRE_IJVectorInitialize,(hjac->b));
+          HYPRE_IJVector block_scaling_hypre_ij;
+          HYPRE_ParVector block_scaling_hypre;
 
-    }
+          VecHYPRE_IJVectorCreate(block_scaling, &block_scaling_hypre_ij);
+          VecHYPRE_IJVectorCopy(block_scaling, block_scaling_hypre_ij);
+
+          PetscStackCallStandard(HYPRE_IJVectorGetObject,(block_scaling_hypre_ij,(void**)&block_scaling_hypre));
+
+      	PetscStackCallStandard(HYPRE_IJMatrixGetObject,(hjac->ij,(void**)&hmat));
+
+
+      	//HYPRE_ParCSRMatrix  A_test;
+
+      	PetscStackCallStandard(hypre_ParcsrVariableBlockInvScal,( hmat,
+           		               block_scaling_hypre,
+                                            &A_scaled) );
+
+      	  PetscStackCallStandard(hypre_ParvecVariableBlockInvScal,(bv,block_scaling_hypre,&b_scaled, hmat));
+
+      	  // now have pointers to new persistent data, A_scaled and b_scaled,
+      	  // destroy old data and move pointers to new data
+      	  //
+      	  PetscStackCallStandard(HYPRE_IJMatrixDestroy,(hjac->ij));
+      	  PetscStackCallStandard(HYPRE_IJVectorDestroy,(hjac->b));
+      	  hjac->inner_free=PETSC_FALSE;
+
+      	  /* Code to create new ij matrix taken from MatCreateFromParCSR routine in myhypre.c*/
+      	  PetscInt              rstart,rend,cstart,cend,M,N;
+      	  MPI_Comm              comm;
+      	  /* access ParCSRMatrix */
+      	  rstart = hypre_ParCSRMatrixFirstRowIndex(A_scaled);
+      	  rend   = hypre_ParCSRMatrixLastRowIndex(A_scaled);
+      	  cstart = hypre_ParCSRMatrixFirstColDiag(A_scaled);
+      	  cend   = hypre_ParCSRMatrixLastColDiag(A_scaled);
+      	  M      = hypre_ParCSRMatrixGlobalNumRows(A_scaled);
+      	  N      = hypre_ParCSRMatrixGlobalNumCols(A_scaled);
+
+      	  /* fix for empty local rows/columns */
+      	  if (rend < rstart) rend = rstart;
+      	  if (cend < cstart) cend = cstart;
+
+      	  /* PETSc convention */
+      	  rend++;
+      	  cend++;
+      	  rend = PetscMin(rend,M);
+      	  cend = PetscMin(cend,N);
+
+      	  /* create HYPRE_IJMatrix */
+      	  PetscStackCallStandard(HYPRE_IJMatrixCreate,(hjac->comm,rstart,rend-1,cstart,cend-1,&hjac->ij));
+      	  PetscStackCallStandard(HYPRE_IJMatrixSetObjectType,(hjac->ij,HYPRE_PARCSR));
+      	  hypre_IJMatrixObject(hjac->ij) = A_scaled;
+      	  /* set assembled flag */
+      	  hypre_IJMatrixAssembleFlag(hjac->ij) = 1;
+      	  PetscStackCallStandard(HYPRE_IJMatrixInitialize,(hjac->ij));
+
+      	  /* create the HYPRE_IJVector*/
+      	  PetscStackCallStandard(HYPRE_IJVectorCreate,(hjac->comm,cstart,cend-1,&hjac->b));
+      	  PetscStackCallStandard(HYPRE_IJVectorSetObjectType,(hjac->b,HYPRE_PARCSR));
+      	  hypre_IJVectorObject(hjac->b) = b_scaled;
+      	  //hypre_IJVectorAssembleFlag(hjac->b) = 1;
+      	  PetscStackCallStandard(HYPRE_IJVectorInitialize,(hjac->b));
+
+        }
+
+
 
 
   }
