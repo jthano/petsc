@@ -1101,6 +1101,7 @@ static PetscErrorCode MatDestroy_HYPRE(Mat A)
   if (hA->b) PetscStackCallStandard(HYPRE_IJVectorDestroy,(hA->b));
   if (hA->ij) {
     if (!hA->inner_free) hypre_IJMatrixObject(hA->ij) = NULL;
+    else
     PetscStackCallStandard(HYPRE_IJMatrixDestroy,(hA->ij));
   }
   if (hA->comm) { ierr = MPI_Comm_free(&hA->comm);CHKERRQ(ierr); }
