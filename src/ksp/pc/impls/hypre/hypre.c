@@ -561,6 +561,8 @@ static PetscErrorCode PCApply_HYPRE(PC pc,Vec b,Vec x)
       PetscStackCallStandard(hypre_ParvecVariableBlockInvScal,(jbv,block_scaling_hypre,&b_scaled_local, hmat) );
 
       jbv = b_scaled_local;
+  } else{
+	  b_scaled_local = NULL;
   }
 
   PetscStackCall("Hypre solve",hierr = (*jac->solve)(jac->hsolver,hmat,jbv,jxv);
