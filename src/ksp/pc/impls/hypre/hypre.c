@@ -260,6 +260,16 @@ static PetscErrorCode PCSetUp_HYPRE(PC pc)
     const Vec       *vecs;
     HYPRE_Complex   *petscvecarray;
 
+//    MPI_Comm hpmat_com;
+//    PetscViewer viewer;
+//    PetscObjectGetComm((PetscObject)(jac->hpmat), &hpmat_com);
+//
+//    PetscViewerASCIIOpen(hpmat_com, "Amat.m", &viewer);
+//    PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+//    MatView(jac->hpmat,viewer);
+//    PetscViewerPopFormat(viewer);
+//    PetscViewerDestroy(&viewer);
+
     ierr = MatGetBlockSize(pc->pmat,&bs);CHKERRQ(ierr);
     if (bs > 1) PetscStackCallStandard(HYPRE_BoomerAMGSetNumFunctions,(jac->hsolver,bs));
     ierr = MatGetNearNullSpace(pc->mat, &mnull);CHKERRQ(ierr);
@@ -290,7 +300,6 @@ static PetscErrorCode PCSetUp_HYPRE(PC pc)
       PetscStackCallStandard(HYPRE_BoomerAMGSetInterpVectors,(jac->hsolver,nvec,jac->phmnull));
       jac->n_hmnull = nvec;
     }
-
 
     // block diagonal prescaling
     if (jac->diag_scaling_block_size>0){
@@ -564,6 +573,28 @@ static PetscErrorCode PCApply_HYPRE(PC pc,Vec b,Vec x)
   } else{
 	  b_scaled_local = NULL;
   }
+
+      static int current_direction = 1;
+      char direction_string[3];
+
+      char base_name[13] = "Amat";
+
+      sprintf(direction_string,"%d",current_direction);
+
+      MPI_Comm hpmat_com;
+      PetscViewer viewer;
+      PetscObjectGetComm((PetscObject)(jac->hpmat), &hpmat_com);
+
+      strcat(base_name,direction_string);
+      strcat(base_name,".txt");
+
+      PetscViewerASCIIOpen(hpmat_com,base_name, &viewer);
+      PetscViewerPushFormat(viewer, PETSC_VIEWER_ASCII_MATLAB);
+      MatView(jac->hpmat,viewer);
+      PetscViewerPopFormat(viewer);
+      PetscViewerDestroy(&viewer);
+
+      current_direction++;
 
   PetscStackCall("Hypre solve",hierr = (*jac->solve)(jac->hsolver,hmat,jbv,jxv);
   if (hierr && hierr != HYPRE_ERROR_CONV) SETERRQ1(PETSC_COMM_SELF,PETSC_ERR_LIB,"Error in HYPRE solver, error code %d",hierr);
