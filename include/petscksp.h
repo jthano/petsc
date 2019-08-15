@@ -1,8 +1,8 @@
 /*
    Defines the interface functions for the Krylov subspace accelerators.
 */
-#ifndef __PETSCKSP_H
-#define __PETSCKSP_H
+#ifndef PETSCKSP_H
+#define PETSCKSP_H
 #include <petscpc.h>
 
 PETSC_EXTERN PetscErrorCode KSPInitializePackage(void);
@@ -150,6 +150,7 @@ PETSC_EXTERN PetscErrorCode PCMGGetSmootherDown(PC,PetscInt,KSP*);
 PETSC_EXTERN PetscErrorCode PCMGGetSmootherUp(PC,PetscInt,KSP*);
 PETSC_EXTERN PetscErrorCode PCMGGetCoarseSolve(PC,KSP*);
 PETSC_EXTERN PetscErrorCode PCGalerkinGetKSP(PC,KSP*);
+PETSC_EXTERN PetscErrorCode PCDeflationGetCoarseKSP(PC,KSP*);
 
 PETSC_EXTERN PetscErrorCode KSPBuildSolution(KSP,Vec,Vec*);
 PETSC_EXTERN PetscErrorCode KSPBuildResidual(KSP,Vec,Vec,Vec*);

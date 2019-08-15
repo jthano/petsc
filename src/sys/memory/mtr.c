@@ -13,10 +13,10 @@
 /*
      These are defined in mal.c and ensure that malloced space is PetscScalar aligned
 */
-PETSC_EXTERN PetscErrorCode PetscMallocAlign(size_t,int,const char[],const char[],void**);
+PETSC_EXTERN PetscErrorCode PetscMallocAlign(size_t,PetscBool,int,const char[],const char[],void**);
 PETSC_EXTERN PetscErrorCode PetscFreeAlign(void*,int,const char[],const char[]);
 PETSC_EXTERN PetscErrorCode PetscReallocAlign(size_t,int,const char[],const char[],void**);
-PETSC_EXTERN PetscErrorCode PetscTrMallocDefault(size_t,int,const char[],const char[],void**);
+PETSC_EXTERN PetscErrorCode PetscTrMallocDefault(size_t,PetscBool,int,const char[],const char[],void**);
 PETSC_EXTERN PetscErrorCode PetscTrFreeDefault(void*,int,const char[],const char[]);
 PETSC_EXTERN PetscErrorCode PetscTrReallocDefault(size_t,int,const char[],const char[],void**);
 
@@ -111,6 +111,8 @@ PETSC_INTERN PetscErrorCode PetscSetUseTrMalloc_Private(void)
    Level: advanced
 
    Notes:
+    This is only run if PetscMallocDebug() has been called which is set by -malloc_test (if debugging is turned on) or -malloc_debug (any time)
+
     You should generally use CHKMEMQ as a short cut for calling this
     routine.
 
@@ -129,6 +131,7 @@ PetscErrorCode  PetscMallocValidate(int line,const char function[],const char fi
   char         *a;
   PetscClassId *nend;
 
+  if (!TRdebugLevel) return 0;
   PetscFunctionBegin;
   head = TRhead; lasthead = NULL;
   while (head) {
@@ -170,7 +173,7 @@ PetscErrorCode  PetscMallocValidate(int line,const char function[],const char fi
     double aligned pointer to requested storage, or null if not
     available.
  */
-PetscErrorCode  PetscTrMallocDefault(size_t a,int lineno,const char function[],const char filename[],void **result)
+PetscErrorCode  PetscTrMallocDefault(size_t a,PetscBool clear,int lineno,const char function[],const char filename[],void **result)
 {
   TRSPACE        *head;
   char           *inew;
@@ -181,17 +184,10 @@ PetscErrorCode  PetscTrMallocDefault(size_t a,int lineno,const char function[],c
   /* Do not try to handle empty blocks */
   if (!a) { *result = NULL; PetscFunctionReturn(0); }
 
-  if (TRdebugLevel) {
-    ierr = PetscMallocValidate(lineno,function,filename); if (ierr) PetscFunctionReturn(ierr);
-  }
+  ierr = PetscMallocValidate(lineno,function,filename); if (ierr) PetscFunctionReturn(ierr);
 
   nsize = (a + (PETSC_MEMALIGN-1)) & ~(PETSC_MEMALIGN-1);
-  ierr  = PetscMallocAlign(nsize+sizeof(TrSPACE)+sizeof(PetscClassId),lineno,function,filename,(void**)&inew);CHKERRQ(ierr);
-
-  if (PetscLogMemory) {
-    /* zero the memory to force the value of PetscMemoryGetCurrentUsage() to accurately reflect allocated memory */
-    ierr = PetscMemzero(inew,nsize+sizeof(TrSPACE)+sizeof(PetscClassId));CHKERRQ(ierr);
-  }
+  ierr  = PetscMallocAlign(nsize+sizeof(TrSPACE)+sizeof(PetscClassId),clear,lineno,function,filename,(void**)&inew);CHKERRQ(ierr);
 
   head  = (TRSPACE*)inew;
   inew += sizeof(TrSPACE);
@@ -272,9 +268,7 @@ PetscErrorCode  PetscTrFreeDefault(void *aa,int line,const char function[],const
   /* Do not try to handle empty blocks */
   if (!a) PetscFunctionReturn(0);
 
-  if (TRdebugLevel) {
-    ierr = PetscMallocValidate(line,function,file);CHKERRQ(ierr);
-  }
+  ierr = PetscMallocValidate(line,function,file);CHKERRQ(ierr);
 
   ahead = a;
   a     = a - sizeof(TrSPACE);
@@ -314,9 +308,6 @@ PetscErrorCode  PetscTrFreeDefault(void *aa,int line,const char function[],const
   } else {
     head->lineno = -head->lineno;
   }
-  /* zero out memory - helps to find some reuse of already freed memory */
-  ierr = PetscMemzero(aa,head->size);CHKERRQ(ierr);
-
   if (TRallocated < head->size) SETERRQ(PETSC_COMM_SELF,PETSC_ERR_MEMC,"TRallocate is smaller than memory just freed");
   TRallocated -= head->size;
   TRfrags--;
@@ -364,11 +355,11 @@ PetscErrorCode PetscTrReallocDefault(size_t len, int lineno, const char function
   }
   /* Realloc with NULL = malloc */
   if (!*result) {
-    ierr = PetscTrMallocDefault(len,lineno,function,filename,result);CHKERRQ(ierr);
+    ierr = PetscTrMallocDefault(len,PETSC_FALSE,lineno,function,filename,result);CHKERRQ(ierr);
     PetscFunctionReturn(0);
   }
 
-  if (TRdebugLevel) {ierr = PetscMallocValidate(lineno,function,filename); if (ierr) PetscFunctionReturn(ierr);}
+  ierr = PetscMallocValidate(lineno,function,filename); if (ierr) PetscFunctionReturn(ierr);
 
   ahead = a;
   a     = a - sizeof(TrSPACE);

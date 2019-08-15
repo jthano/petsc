@@ -1612,6 +1612,7 @@ PetscErrorCode MatSetOption_MPIBAIJ(Mat A,MatOption op,PetscBool flg)
     ierr = MatSetOption(a->B,op,flg);CHKERRQ(ierr);
     break;
   case MAT_NEW_DIAGONALS:
+  case MAT_SORTED_FULL:
     ierr = PetscInfo1(A,"Option %s ignored\n",MatOptions[op]);CHKERRQ(ierr);
     break;
   case MAT_IGNORE_OFF_PROC_ENTRIES:
@@ -2755,7 +2756,7 @@ PetscErrorCode MatMPIBAIJSetPreallocationCSR_MPIBAIJ(Mat B,PetscInt bs,const Pet
     PetscInt          row    = i + rstart;
     PetscInt          ncols  = ii[i+1] - ii[i];
     const PetscInt    *icols = jj + ii[i];
-    if (!roworiented) {         /* block ordering matches the non-nested layout of MatSetValues so we can insert entire rows */
+    if (bs == 1 || !roworiented) {         /* block ordering matches the non-nested layout of MatSetValues so we can insert entire rows */
       const PetscScalar *svals = values + (V ? (bs*bs*ii[i]) : 0);
       ierr = MatSetValuesBlocked_MPIBAIJ(B,1,&row,ncols,icols,svals,INSERT_VALUES);CHKERRQ(ierr);
     } else {                    /* block ordering does not match so we can only insert one block at a time. */
@@ -2775,8 +2776,7 @@ PetscErrorCode MatMPIBAIJSetPreallocationCSR_MPIBAIJ(Mat B,PetscInt bs,const Pet
 }
 
 /*@C
-   MatMPIBAIJSetPreallocationCSR - Allocates memory for a sparse parallel matrix in BAIJ format
-   (the default parallel PETSc format).
+   MatMPIBAIJSetPreallocationCSR - Creates a sparse parallel matrix in BAIJ format using the given nonzero structure and (optional) numerical values
 
    Collective
 
@@ -2787,7 +2787,7 @@ PetscErrorCode MatMPIBAIJSetPreallocationCSR_MPIBAIJ(Mat B,PetscInt bs,const Pet
 .  j - the column indices for each local row (starts with zero) these must be sorted for each row
 -  v - optional values in the matrix
 
-   Level: developer
+   Level: advanced
 
    Notes:
     The order of the entries in values is specified by the MatOption MAT_ROW_ORIENTED.  For example, C programs
@@ -2795,6 +2795,8 @@ PetscErrorCode MatMPIBAIJSetPreallocationCSR_MPIBAIJ(Mat B,PetscInt bs,const Pet
    over rows within a block and the last index is over columns within a block row.  Fortran programs will likely set
    MAT_ROW_ORIENTED=PETSC_FALSE and use a Fortran array v(bs,bs,nnz) in which the first index is over rows within a
    block column and the second index is over columns within a block.
+
+   Though this routine has Preallocation() in the name it also sets the exact nonzero locations of the matrix entries and usually the numerical values as well
 
 .seealso: MatCreate(), MatCreateSeqAIJ(), MatSetValues(), MatMPIBAIJSetPreallocation(), MatCreateAIJ(), MPIAIJ, MatCreateMPIBAIJWithArrays(), MPIBAIJ
 @*/
@@ -2982,7 +2984,11 @@ PETSC_INTERN PetscErrorCode MatConvert_MPIBAIJ_MPIAIJ(Mat A,MatType newtype,MatR
 . -mat_block_size <bs> - set the blocksize used to store the matrix
 - -mat_use_hash_table <fact>
 
-  Level: beginner
+   Level: beginner
+
+   Notes:
+    MatSetOptions(,MAT_STRUCTURE_ONLY,PETSC_TRUE) may be called for this matrix type. In this no
+    space is allocated for the nonzero entries and any entries passed with MatSetValues() are ignored
 
 .seealso: MatCreateMPIBAIJ
 M*/
@@ -3468,7 +3474,8 @@ PetscErrorCode MatLoad_MPIBAIJ(Mat newmat,PetscViewer viewer)
     ierr = PetscBinaryRead(fd,locrowlens,mend,NULL,PETSC_INT);CHKERRQ(ierr);
     for (j=mend; j<m; j++) locrowlens[j] = 1;
     ierr = PetscMalloc1(mmax,&rowlengths);CHKERRQ(ierr);
-    ierr = PetscCalloc1(size,&procsnz);CHKERRQ(ierr);
+    ierr = PetscMalloc1(size,&procsnz);CHKERRQ(ierr);
+    procsnz[0] = 0;
     for (j=0; j<m; j++) {
       procsnz[0] += locrowlens[j];
     }
@@ -3478,6 +3485,7 @@ PetscErrorCode MatLoad_MPIBAIJ(Mat newmat,PetscViewer viewer)
       ierr = PetscBinaryRead(fd,rowlengths,mend,NULL,PETSC_INT);CHKERRQ(ierr);
       for (j=mend; j<browners[i+1] - browners[i]; j++) rowlengths[j] = 1;
       /* calculate the number of nonzeros on each processor */
+      procsnz[i] = 0;
       for (j=0; j<browners[i+1]-browners[i]; j++) {
         procsnz[i] += rowlengths[j];
       }
@@ -3634,8 +3642,8 @@ PetscErrorCode MatLoad_MPIBAIJ(Mat newmat,PetscViewer viewer)
    MatMPIBAIJSetHashTableFactor - Sets the factor required to compute the size of the HashTable.
 
    Input Parameters:
-.  mat  - the matrix
-.  fact - factor
++  mat  - the matrix
+-  fact - factor
 
    Not Collective, each process can use a different factor
 
@@ -3903,12 +3911,9 @@ PetscErrorCode MatCreateMPIMatConcatenateSeqMat_MPIBAIJ(MPI_Comm comm,Mat inmat,
     ierr = MatGetBlockSizes(inmat,&bs,&cbs);CHKERRQ(ierr);
     mbs = m/bs; Nbs = N/cbs;
     if (n == PETSC_DECIDE) {
-      nbs  = n;
-      ierr = PetscSplitOwnership(comm,&nbs,&Nbs);CHKERRQ(ierr);
-      n    = nbs*cbs;
-    } else {
-      nbs = n/cbs;
+      ierr = PetscSplitOwnershipBlock(comm,cbs,&n,&N);
     }
+    nbs = n/cbs;
 
     ierr = PetscMalloc1(rmax,&bindx);CHKERRQ(ierr);
     ierr = MatPreallocateInitialize(comm,mbs,nbs,dnz,onz);CHKERRQ(ierr); /* inline function, output __end and __rstart are used below */

@@ -21,7 +21,7 @@ static PetscBool Xterm = PETSC_TRUE;
    Not Collective
 
    Input Parameters:
-+  terminal - name of terminal and any flags required to execute a program.
+.  terminal - name of terminal and any flags required to execute a program.
               For example "xterm -e", "urxvt -e", "gnome-terminal -x".
 
    Options Database Keys:
@@ -98,16 +98,8 @@ PetscErrorCode  PetscSetDefaultDebugger(void)
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
-#if defined(PETSC_USE_LLDB_DEBUGGER)
-  ierr = PetscSetDebugger("lldb",PETSC_TRUE);CHKERRQ(ierr);
-#elif defined(PETSC_USE_DBX_DEBUGGER)
-  ierr = PetscSetDebugger("dbx",PETSC_TRUE);CHKERRQ(ierr);
-#elif defined(PETSC_USE_XDB_DEBUGGER)
-  ierr = PetscSetDebugger("xdb",PETSC_TRUE);CHKERRQ(ierr);
-#elif defined(PETSC_USE_IDB_DEBUGGER)
-  ierr = PetscSetDebugger("idb",PETSC_TRUE);CHKERRQ(ierr);
-#else  /* Default is gdb */
-  ierr = PetscSetDebugger("gdb",PETSC_TRUE);CHKERRQ(ierr);
+#if defined(PETSC_USE_DEBUGGER)
+  ierr = PetscSetDebugger(PETSC_USE_DEBUGGER,PETSC_TRUE);CHKERRQ(ierr);
 #endif
   ierr = PetscSetDebugTerminal("xterm -e");CHKERRQ(ierr);
   PetscFunctionReturn(0);

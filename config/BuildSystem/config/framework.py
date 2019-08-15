@@ -201,7 +201,7 @@ class Framework(config.base.Configure, script.LanguageProcessor):
     '''Change titles and setup all children'''
     argDB = script.Script.setupArguments(self, argDB)
 
-    self.help.title = 'Configure Help\n   Comma separated lists should be given between [] (use \[ \] in tcsh/csh)\n      For example: --with-mpi-lib=\[/usr/local/lib/libmpich.a,/usr/local/lib/libpmpich.a\]\n   Options beginning with --known- are to provide values you already know\n      For example:--known-endian=big\n   Options beginning with --with- indicate that you are requesting something\n      For example: --with-clanguage=c++\n   <prog> means a program name or a full path to a program\n      For example:--with-cmake=/Users/bsmith/bin/cmake\n   <bool> means a boolean, use either 0 or 1\n   <dir> means a directory\n      For example: --with-packages-download-dir=/Users/bsmith/Downloads\n   For packages use --with-PACKAGE-dir=<dir> OR\n      --with-PACKAGE-include=<dir> --with-PACKAGE-lib=<lib> OR --download-PACKAGE'
+    self.help.title = 'Configure Help\n   Comma separated lists should be given between [] (use \[ \] in tcsh/csh)\n      For example: --with-mpi-lib=\[/usr/local/lib/libmpich.a,/usr/local/lib/libpmpich.a\]\n   Options beginning with --known- are to provide values you already know\n    Options beginning with --with- indicate that you are requesting something\n      For example: --with-clanguage=c++\n   <prog> means a program name or a full path to a program\n      For example:--with-cmake=/Users/bsmith/bin/cmake\n   <bool> means a boolean, use either 0 or 1\n   <dir> means a directory\n      For example: --with-packages-download-dir=/Users/bsmith/Downloads\n   For packages use --with-PACKAGE-dir=<dir> OR\n      --with-PACKAGE-include=<dir> --with-PACKAGE-lib=<lib> OR --download-PACKAGE'
     self.actions.title = 'Configure Actions\n   These are the actions performed by configure on the filesystem'
 
     for child in self.childGraph.vertices:
@@ -244,14 +244,15 @@ class Framework(config.base.Configure, script.LanguageProcessor):
 
   def saveHash(self):
     '''Saves the hash for configure (created in arch.py)'''
-    if hasattr(self,'hash') and hasattr(self,'hashfile'):
-       self.logPrint('Attempting to save configure hash file: '+self.hashfile)
-       try:
-         with open(self.hashfile, 'w') as f:
-           f.write(self.hash)
-       except:
-         self.logPrint('Unable to save configure hash file: '+self.hashfile)
-
+    for hf in ['hashfile','hashfilepackages']:
+      if hasattr(self,'hash') and hasattr(self,hf):
+        self.logPrint('Attempting to save configure hash file: '+getattr(self,hf))
+        try:
+          with open(getattr(self,hf), 'w') as f:
+            f.write(self.hash)
+          self.logPrint('Saved configure hash file: '+getattr(self,hf))
+        except:
+          self.logPrint('Unable to save configure hash file: '+getattr(self,hf))
 
   def cleanup(self):
     self.actions.output(self.log)
@@ -621,16 +622,18 @@ class Framework(config.base.Configure, script.LanguageProcessor):
 
   def outputDefine(self, f, name, value = None, comment = ''):
     '''Define "name" to "value" in the configuration header'''
-    guard = re.match(r'^(\w+)(\([\w,]+\))?', name).group(1)
+    # we need to keep the libraries in this list and simply not print them at the end
+    # because libraries.havelib() is used to find library in this list we had to list the libraries in the
+    # list even though we don't need them in petscconf.h
+    # two packages have LIB in there name so we have to include them here
+    if (name.startswith('PETSC_HAVE_LIB') and not name in ['PETSC_HAVE_LIBPNG','PETSC_HAVE_LIBJPEG']) or name.endswith('LIB'): return
     if comment:
       for line in comment.split('\n'):
         if line: f.write('/* '+line+' */\n')
-    f.write('#ifndef '+guard+'\n')
     if value:
       f.write('#define '+name+' '+str(value)+'\n')
     else:
       f.write('/* #undef '+name+' */\n')
-    f.write('#endif\n\n')
     return
 
   def outputMakeMacro(self, f, name, value):

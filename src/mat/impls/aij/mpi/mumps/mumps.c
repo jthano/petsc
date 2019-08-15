@@ -225,7 +225,7 @@ static PetscErrorCode MatMumpsHandleSchur_Private(Mat F, PetscBool expansion)
   MatConvertToTriples_A_B - convert Petsc matrix to triples: row[nz], col[nz], val[nz]
 
   input:
-    A       - matrix in aij,baij or sbaij (bs=1) format
+    A       - matrix in aij,baij or sbaij format
     shift   - 0: C style output triple; 1: Fortran style output triple.
     reuse   - MAT_INITIAL_MATRIX: spaces are allocated and values are set for the triple
               MAT_REUSE_MATRIX:   only the values in v array are updated
@@ -333,35 +333,71 @@ PetscErrorCode MatConvertToTriples_seqbaij_seqaij(Mat A,int shift,MatReuse reuse
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode MatConvertToTriples_seqsbaij_seqsbaij(Mat A,int shift,MatReuse reuse,int *nnz,int **r, int **c, PetscScalar **v)
+PetscErrorCode MatConvertToTriples_seqsbaij_seqsbaij(Mat A,int shift,MatReuse reuse,int *nnz,int **r,int **c,PetscScalar **v)
 {
-  const PetscInt *ai, *aj,*ajj,M=A->rmap->n;
-  PetscInt       nz,rnz,i,j;
-  PetscErrorCode ierr;
-  PetscInt       *row,*col;
-  Mat_SeqSBAIJ   *aa=(Mat_SeqSBAIJ*)A->data;
+  const PetscInt *ai, *aj,*ajj;
+  PetscInt        nz,rnz,i,j,k,m,bs;
+  PetscErrorCode  ierr;
+  PetscInt        *row,*col;
+  PetscScalar     *val;
+  Mat_SeqSBAIJ    *aa=(Mat_SeqSBAIJ*)A->data;
+  const PetscInt  bs2=aa->bs2,mbs=aa->mbs;
+#if defined(PETSC_USE_COMPLEX)
+  PetscBool      hermitian;
+#endif
 
   PetscFunctionBegin;
-  *v = aa->a;
+#if defined(PETSC_USE_COMPLEX)
+  ierr = MatGetOption(A,MAT_HERMITIAN,&hermitian);CHKERRQ(ierr);
+  if (hermitian) SETERRQ(PetscObjectComm((PetscObject)A),PETSC_ERR_SUP,"MUMPS does not support Hermitian symmetric matrices for Choleksy");
+#endif
+  ai   = aa->i;
+  aj   = aa->j;
+  ierr = MatGetBlockSize(A,&bs);CHKERRQ(ierr);
   if (reuse == MAT_INITIAL_MATRIX) {
     nz   = aa->nz;
-    ai   = aa->i;
-    aj   = aa->j;
-    *v   = aa->a;
-    *nnz = nz;
-    ierr = PetscMalloc1(2*nz, &row);CHKERRQ(ierr);
-    col  = row + nz;
+    ierr = PetscMalloc((2*bs2*nz*sizeof(PetscInt)+(bs>1?bs2*nz*sizeof(PetscScalar):0)), &row);CHKERRQ(ierr);
+    col  = row + bs2*nz;
+    if (bs>1)
+      val = (PetscScalar*)(col + bs2*nz);
+    else
+      val = aa->a;
 
-    nz = 0;
-    for (i=0; i<M; i++) {
+    *r = row; *c = col; *v = val;
+  } else {
+    row = *r; col = *c; val = *v;
+  }
+
+  nz = 0;
+  if (bs>1) {
+    for (i=0; i<mbs; i++) {
+      rnz = ai[i+1] - ai[i];
+      ajj = aj + ai[i];
+      for (j=0; j<rnz; j++) {
+        for (k=0; k<bs; k++) {
+          for (m=0; m<bs; m++) {
+            if (ajj[j]>i || k>=m) {
+              if (reuse == MAT_INITIAL_MATRIX) {
+                row[nz] = i*bs + m + shift;
+                col[nz] = ajj[j]*bs + k + shift;
+              }
+              val[nz++] = aa->a[(ai[i]+j)*bs2 + m + k*bs];
+            }
+          }
+        }
+      }
+    }
+  } else if (reuse == MAT_INITIAL_MATRIX) {
+    for (i=0; i<mbs; i++) {
       rnz = ai[i+1] - ai[i];
       ajj = aj + ai[i];
       for (j=0; j<rnz; j++) {
         row[nz] = i+shift; col[nz++] = ajj[j] + shift;
       }
     }
-    *r = row; *c = col;
+    if (nz != aa->nz) SETERRQ2(PETSC_COMM_SELF,PETSC_ERR_PLIB,"Different numbers of nonzeros %D != %D",nz,aa->nz);
   }
+  *nnz = nz;
   PetscFunctionReturn(0);
 }
 
@@ -375,8 +411,15 @@ PetscErrorCode MatConvertToTriples_seqaij_seqsbaij(Mat A,int shift,MatReuse reus
   PetscInt          *row,*col;
   Mat_SeqAIJ        *aa=(Mat_SeqAIJ*)A->data;
   PetscBool         missing;
+#if defined(PETSC_USE_COMPLEX)
+  PetscBool         hermitian;
+#endif
 
   PetscFunctionBegin;
+#if defined(PETSC_USE_COMPLEX)
+  ierr = MatGetOption(A,MAT_HERMITIAN,&hermitian);CHKERRQ(ierr);
+  if (hermitian) SETERRQ(PetscObjectComm((PetscObject)A),PETSC_ERR_SUP,"MUMPS does not support Hermitian symmetric matrices for Choleksy");
+#endif
   ai    = aa->i; aj = aa->j; av = aa->a;
   adiag = aa->diag;
   ierr  = MatMissingDiagonal_SeqAIJ(A,&missing,&i);CHKERRQ(ierr);
@@ -464,30 +507,43 @@ PetscErrorCode MatConvertToTriples_seqaij_seqsbaij(Mat A,int shift,MatReuse reus
   PetscFunctionReturn(0);
 }
 
-PetscErrorCode MatConvertToTriples_mpisbaij_mpisbaij(Mat A,int shift,MatReuse reuse,int *nnz,int **r, int **c, PetscScalar **v)
+PetscErrorCode MatConvertToTriples_mpisbaij_mpisbaij(Mat A,int shift,MatReuse reuse,int *nnz,int **r,int **c, PetscScalar **v)
 {
-  const PetscInt    *ai, *aj, *bi, *bj,*garray,m=A->rmap->n,*ajj,*bjj;
+  const PetscInt    *ai,*aj,*bi,*bj,*garray,*ajj,*bjj;
   PetscErrorCode    ierr;
-  PetscInt          rstart,nz,i,j,jj,irow,countA,countB;
+  PetscInt          rstart,nz,bs,i,j,k,m,jj,irow,countA,countB;
   PetscInt          *row,*col;
-  const PetscScalar *av, *bv,*v1,*v2;
+  const PetscScalar *av,*bv,*v1,*v2;
   PetscScalar       *val;
   Mat_MPISBAIJ      *mat = (Mat_MPISBAIJ*)A->data;
   Mat_SeqSBAIJ      *aa  = (Mat_SeqSBAIJ*)(mat->A)->data;
   Mat_SeqBAIJ       *bb  = (Mat_SeqBAIJ*)(mat->B)->data;
+  const PetscInt    bs2=aa->bs2,mbs=aa->mbs;
+#if defined(PETSC_USE_COMPLEX)
+  PetscBool         hermitian;
+#endif
 
   PetscFunctionBegin;
-  ai=aa->i; aj=aa->j; bi=bb->i; bj=bb->j; rstart= A->rmap->rstart;
-  av=aa->a; bv=bb->a;
+#if defined(PETSC_USE_COMPLEX)
+  ierr = MatGetOption(A,MAT_HERMITIAN,&hermitian);CHKERRQ(ierr);
+  if (hermitian) SETERRQ(PetscObjectComm((PetscObject)A),PETSC_ERR_SUP,"MUMPS does not support Hermitian symmetric matrices for Choleksy");
+#endif
+  ierr = MatGetBlockSize(A,&bs);CHKERRQ(ierr);
+  rstart = A->rmap->rstart;
+  ai = aa->i;
+  aj = aa->j;
+  bi = bb->i;
+  bj = bb->j;
+  av = aa->a;
+  bv = bb->a;
 
   garray = mat->garray;
 
   if (reuse == MAT_INITIAL_MATRIX) {
     nz   = aa->nz + bb->nz;
-    *nnz = nz;
-    ierr = PetscMalloc((2*nz*sizeof(PetscInt)+nz*sizeof(PetscScalar)), &row);CHKERRQ(ierr);
-    col  = row + nz;
-    val  = (PetscScalar*)(col + nz);
+    ierr = PetscMalloc((2*bs2*nz*sizeof(PetscInt)+bs2*nz*sizeof(PetscScalar)), &row);CHKERRQ(ierr);
+    col  = row + bs2*nz;
+    val  = (PetscScalar*)(col + bs2*nz);
 
     *r = row; *c = col; *v = val;
   } else {
@@ -495,31 +551,60 @@ PetscErrorCode MatConvertToTriples_mpisbaij_mpisbaij(Mat A,int shift,MatReuse re
   }
 
   jj = 0; irow = rstart;
-  for (i=0; i<m; i++) {
+  for (i=0; i<mbs; i++) {
     ajj    = aj + ai[i];                 /* ptr to the beginning of this row */
     countA = ai[i+1] - ai[i];
     countB = bi[i+1] - bi[i];
     bjj    = bj + bi[i];
-    v1     = av + ai[i];
-    v2     = bv + bi[i];
+    v1     = av + ai[i]*bs2;
+    v2     = bv + bi[i]*bs2;
 
-    /* A-part */
-    for (j=0; j<countA; j++) {
-      if (reuse == MAT_INITIAL_MATRIX) {
-        row[jj] = irow + shift; col[jj] = rstart + ajj[j] + shift;
+    if (bs>1) {
+      /* A-part */
+      for (j=0; j<countA; j++) {
+        for (k=0; k<bs; k++) {
+          for (m=0; m<bs; m++) {
+            if (rstart + ajj[j]*bs>irow || k>=m) {
+              if (reuse == MAT_INITIAL_MATRIX) {
+                row[jj] = irow + m + shift; col[jj] = rstart + ajj[j]*bs + k + shift;
+              }
+              val[jj++] = v1[j*bs2 + m + k*bs];
+            }
+          }
+        }
       }
-      val[jj++] = v1[j];
-    }
 
-    /* B-part */
-    for (j=0; j < countB; j++) {
-      if (reuse == MAT_INITIAL_MATRIX) {
-        row[jj] = irow + shift; col[jj] = garray[bjj[j]] + shift;
+      /* B-part */
+      for (j=0; j < countB; j++) {
+        for (k=0; k<bs; k++) {
+          for (m=0; m<bs; m++) {
+            if (reuse == MAT_INITIAL_MATRIX) {
+              row[jj] = irow + m + shift; col[jj] = garray[bjj[j]]*bs + k + shift;
+            }
+            val[jj++] = v2[j*bs2 + m + k*bs];
+          }
+        }
       }
-      val[jj++] = v2[j];
+    } else {
+      /* A-part */
+      for (j=0; j<countA; j++) {
+        if (reuse == MAT_INITIAL_MATRIX) {
+          row[jj] = irow + shift; col[jj] = rstart + ajj[j] + shift;
+        }
+        val[jj++] = v1[j];
+      }
+
+      /* B-part */
+      for (j=0; j < countB; j++) {
+        if (reuse == MAT_INITIAL_MATRIX) {
+          row[jj] = irow + shift; col[jj] = garray[bjj[j]] + shift;
+        }
+        val[jj++] = v2[j];
+      }
     }
-    irow++;
+    irow+=bs;
   }
+  *nnz = jj;
   PetscFunctionReturn(0);
 }
 
@@ -536,8 +621,13 @@ PetscErrorCode MatConvertToTriples_mpiaij_mpiaij(Mat A,int shift,MatReuse reuse,
   Mat_SeqAIJ        *bb  = (Mat_SeqAIJ*)(mat->B)->data;
 
   PetscFunctionBegin;
-  ai=aa->i; aj=aa->j; bi=bb->i; bj=bb->j; rstart= A->rmap->rstart;
-  av=aa->a; bv=bb->a;
+  rstart = A->rmap->rstart;
+  ai = aa->i;
+  aj = aa->j;
+  bi = bb->i;
+  bj = bb->j;
+  av = aa->a;
+  bv = bb->a;
 
   garray = mat->garray;
 
@@ -662,11 +752,23 @@ PetscErrorCode MatConvertToTriples_mpiaij_mpisbaij(Mat A,int shift,MatReuse reus
   Mat_MPIAIJ        *mat =  (Mat_MPIAIJ*)A->data;
   Mat_SeqAIJ        *aa  =(Mat_SeqAIJ*)(mat->A)->data;
   Mat_SeqAIJ        *bb  =(Mat_SeqAIJ*)(mat->B)->data;
+#if defined(PETSC_USE_COMPLEX)
+  PetscBool         hermitian;
+#endif
 
   PetscFunctionBegin;
-  ai=aa->i; aj=aa->j; adiag=aa->diag;
-  bi=bb->i; bj=bb->j; garray = mat->garray;
-  av=aa->a; bv=bb->a;
+#if defined(PETSC_USE_COMPLEX)
+  ierr = MatGetOption(A,MAT_HERMITIAN,&hermitian);CHKERRQ(ierr);
+  if (hermitian) SETERRQ(PetscObjectComm((PetscObject)A),PETSC_ERR_SUP,"MUMPS does not support Hermitian symmetric matrices for Choleksy");
+#endif
+  ai     = aa->i;
+  aj     = aa->j;
+  adiag  = aa->diag;
+  bi     = bb->i;
+  bj     = bb->j;
+  garray = mat->garray;
+  av     = aa->a;
+  bv     = bb->a;
 
   rstart = A->rmap->rstart;
 
@@ -971,6 +1073,11 @@ PetscErrorCode MatMatSolve_MUMPS(Mat A,Mat B,Mat X)
   ierr = VecCreateSeqWithArray(PETSC_COMM_SELF,1,nlsol_loc,(PetscScalar*)sol_loc,&msol_loc);CHKERRQ(ierr);
 
   if (!Bt) { /* dense B */
+    /* TODO: Because of non-contiguous indices, the created vecscatter scat_rhs is not done in MPI_Gather, resulting in
+       very inefficient communication. An optimization is to use VecScatterCreateToZero to gather B to rank 0. Then on rank
+       0, re-arrange B into desired order, which is a local operation.
+     */
+
     /* scatter v_mpi to b_seq because MUMPS only supports centralized rhs */
     /* wrap dense rhs matrix B into a vector v_mpi */
     ierr = MatGetLocalSize(B,&m,NULL);CHKERRQ(ierr);
@@ -1251,6 +1358,9 @@ PetscErrorCode MatFactorNumeric_MUMPS(Mat F,Mat A,const MatFactorInfo *info)
   F->assembled    = PETSC_TRUE;
   mumps->matstruc = SAME_NONZERO_PATTERN;
   if (F->schur) { /* reset Schur status to unfactored */
+#if defined(PETSC_HAVE_CUDA)
+    F->schur->valid_GPU_matrix = PETSC_OFFLOAD_CPU;
+#endif
     if (mumps->id.ICNTL(19) == 1) { /* stored by rows */
       mumps->id.ICNTL(19) = 2;
       ierr = MatTranspose(F->schur,MAT_INPLACE_MATRIX,&F->schur);CHKERRQ(ierr);
@@ -1469,7 +1579,6 @@ PetscErrorCode MatLUFactorSymbolic_AIJMUMPS(Mat F,Mat A,IS r,IS c,const MatFacto
   Mat_MUMPS      *mumps = (Mat_MUMPS*)F->data;
   PetscErrorCode ierr;
   Vec            b;
-  IS             is_iden;
   const PetscInt M = A->rmap->N;
 
   PetscFunctionBegin;
@@ -1520,16 +1629,8 @@ PetscErrorCode MatLUFactorSymbolic_AIJMUMPS(Mat F,Mat A,IS r,IS c,const MatFacto
       mumps->id.a_loc = (MumpsScalar*)mumps->val;
     }
     /* MUMPS only supports centralized rhs. Create scatter scat_rhs for repeated use in MatSolve() */
-    if (!mumps->myid) {
-      ierr = VecCreateSeq(PETSC_COMM_SELF,A->rmap->N,&mumps->b_seq);CHKERRQ(ierr);
-      ierr = ISCreateStride(PETSC_COMM_SELF,A->rmap->N,0,1,&is_iden);CHKERRQ(ierr);
-    } else {
-      ierr = VecCreateSeq(PETSC_COMM_SELF,0,&mumps->b_seq);CHKERRQ(ierr);
-      ierr = ISCreateStride(PETSC_COMM_SELF,0,0,1,&is_iden);CHKERRQ(ierr);
-    }
     ierr = MatCreateVecs(A,NULL,&b);CHKERRQ(ierr);
-    ierr = VecScatterCreate(b,is_iden,mumps->b_seq,is_iden,&mumps->scat_rhs);CHKERRQ(ierr);
-    ierr = ISDestroy(&is_iden);CHKERRQ(ierr);
+    ierr = VecScatterCreateToZero(b,&mumps->scat_rhs,&mumps->b_seq);CHKERRQ(ierr);
     ierr = VecDestroy(&b);CHKERRQ(ierr);
     break;
   }
@@ -1550,7 +1651,6 @@ PetscErrorCode MatLUFactorSymbolic_BAIJMUMPS(Mat F,Mat A,IS r,IS c,const MatFact
   Mat_MUMPS      *mumps = (Mat_MUMPS*)F->data;
   PetscErrorCode ierr;
   Vec            b;
-  IS             is_iden;
   const PetscInt M = A->rmap->N;
 
   PetscFunctionBegin;
@@ -1582,16 +1682,8 @@ PetscErrorCode MatLUFactorSymbolic_BAIJMUMPS(Mat F,Mat A,IS r,IS c,const MatFact
       mumps->id.a_loc = (MumpsScalar*)mumps->val;
     }
     /* MUMPS only supports centralized rhs. Create scatter scat_rhs for repeated use in MatSolve() */
-    if (!mumps->myid) {
-      ierr = VecCreateSeq(PETSC_COMM_SELF,A->cmap->N,&mumps->b_seq);CHKERRQ(ierr);
-      ierr = ISCreateStride(PETSC_COMM_SELF,A->cmap->N,0,1,&is_iden);CHKERRQ(ierr);
-    } else {
-      ierr = VecCreateSeq(PETSC_COMM_SELF,0,&mumps->b_seq);CHKERRQ(ierr);
-      ierr = ISCreateStride(PETSC_COMM_SELF,0,0,1,&is_iden);CHKERRQ(ierr);
-    }
     ierr = MatCreateVecs(A,NULL,&b);CHKERRQ(ierr);
-    ierr = VecScatterCreate(b,is_iden,mumps->b_seq,is_iden,&mumps->scat_rhs);CHKERRQ(ierr);
-    ierr = ISDestroy(&is_iden);CHKERRQ(ierr);
+    ierr = VecScatterCreateToZero(b,&mumps->scat_rhs,&mumps->b_seq);CHKERRQ(ierr);
     ierr = VecDestroy(&b);CHKERRQ(ierr);
     break;
   }
@@ -1610,7 +1702,6 @@ PetscErrorCode MatCholeskyFactorSymbolic_MUMPS(Mat F,Mat A,IS r,const MatFactorI
   Mat_MUMPS      *mumps = (Mat_MUMPS*)F->data;
   PetscErrorCode ierr;
   Vec            b;
-  IS             is_iden;
   const PetscInt M = A->rmap->N;
 
   PetscFunctionBegin;
@@ -1642,16 +1733,8 @@ PetscErrorCode MatCholeskyFactorSymbolic_MUMPS(Mat F,Mat A,IS r,const MatFactorI
       mumps->id.a_loc = (MumpsScalar*)mumps->val;
     }
     /* MUMPS only supports centralized rhs. Create scatter scat_rhs for repeated use in MatSolve() */
-    if (!mumps->myid) {
-      ierr = VecCreateSeq(PETSC_COMM_SELF,A->cmap->N,&mumps->b_seq);CHKERRQ(ierr);
-      ierr = ISCreateStride(PETSC_COMM_SELF,A->cmap->N,0,1,&is_iden);CHKERRQ(ierr);
-    } else {
-      ierr = VecCreateSeq(PETSC_COMM_SELF,0,&mumps->b_seq);CHKERRQ(ierr);
-      ierr = ISCreateStride(PETSC_COMM_SELF,0,0,1,&is_iden);CHKERRQ(ierr);
-    }
     ierr = MatCreateVecs(A,NULL,&b);CHKERRQ(ierr);
-    ierr = VecScatterCreate(b,is_iden,mumps->b_seq,is_iden,&mumps->scat_rhs);CHKERRQ(ierr);
-    ierr = ISDestroy(&is_iden);CHKERRQ(ierr);
+    ierr = VecScatterCreateToZero(b,&mumps->scat_rhs,&mumps->b_seq);CHKERRQ(ierr);
     ierr = VecDestroy(&b);CHKERRQ(ierr);
     break;
   }
@@ -2424,7 +2507,7 @@ PetscErrorCode MatMumpsGetRinfog(Mat F,PetscInt icntl,PetscReal *val)
 
   Works with MATAIJ and MATSBAIJ matrices
 
-  Use ./configure --download-mumps --download-scalapack --download-parmetis --download-metis --download-ptscotch  to have PETSc installed with MUMPS
+  Use ./configure --download-mumps --download-scalapack --download-parmetis --download-metis --download-ptscotch to have PETSc installed with MUMPS
 
   Use ./configure --with-openmp --download-hwloc (or --with-hwloc) to enable running MUMPS in MPI+OpenMP hybrid mode and non-MUMPS in flat-MPI mode. See details below.
 
@@ -2469,6 +2552,8 @@ PetscErrorCode MatMumpsGetRinfog(Mat F,PetscInt icntl,PetscReal *val)
   Level: beginner
 
     Notes:
+    MUMPS Cholesky does not handle (complex) Hermitian matrices http://mumps.enseeiht.fr/doc/userguide_5.2.1.pdf so using it will error if the matrix is Hermitian.
+
     When a MUMPS factorization fails inside a KSP solve, for example with a KSP_DIVERGED_PC_FAILED, one can find the MUMPS information about the failure by calling
 $          KSPGetPC(ksp,&pc);
 $          PCFactorGetMatrix(pc,&mat);
@@ -2476,23 +2561,21 @@ $          MatMumpsGetInfo(mat,....);
 $          MatMumpsGetInfog(mat,....); etc.
            Or you can run with -ksp_error_if_not_converged and the program will be stopped and the information printed in the error message.
 
-   If you want to run MUMPS in MPI+OpenMP hybrid mode (i.e., enable multithreading in MUMPS), but still want to run the non-MUMPS part
+   Two modes to run MUMPS/PETSc with OpenMP
+
+$     Set OMP_NUM_THREADS and run with fewer MPI ranks than cores. For example, if you want to have 16 OpenMP
+$     threads per rank, then you may use "export OMP_NUM_THREADS=16 && mpirun -n 4 ./test".
+
+$     -mat_mumps_use_omp_threads [m] and run your code with as many MPI ranks as the number of cores. For example,
+$     if a compute node has 32 cores and you run on two nodes, you may use "mpirun -n 64 ./test -mat_mumps_use_omp_threads 16"
+
+   To run MUMPS in MPI+OpenMP hybrid mode (i.e., enable multithreading in MUMPS), but still run the non-MUMPS part
    (i.e., PETSc part) of your code in the so-called flat-MPI (aka pure-MPI) mode, you need to configure PETSc with --with-openmp --download-hwloc
    (or --with-hwloc), and have an MPI that supports MPI-3.0's process shared memory (which is usually available). Since MUMPS calls BLAS
-   libraries, to really get performance, you should have multithreaded BLAS libraries such as Intel MKL, AMD ACML, Cray libSci or open sourced
-   OpenBLAS (PETSc has configure options to install/specify them). With these conditions met, you can run your program as before but with
-   an extra option -mat_mumps_use_omp_threads [m]. It works as if we set OMP_NUM_THREADS=m to MUMPS, with m defaults to the number of cores
-   per CPU socket (or package, in hwloc term), or number of PETSc MPI processes on a node, whichever is smaller.
+   libraries, to really get performance, you should have multithreaded BLAS libraries such as Intel MKL, AMD ACML, Cray libSci or OpenBLAS
+   (PETSc will automatically try to utilized a threaded BLAS if --with-openmp is provided).
 
-   By flat-MPI or pure-MPI mode, it means you run your code with as many MPI ranks as the number of cores. For example,
-   if a compute node has 32 cores and you run on two nodes, you may use "mpirun -n 64 ./test". To run MPI+OpenMP hybrid MUMPS,
-   the tranditional way is to set OMP_NUM_THREADS and run with fewer MPI ranks than cores. For example, if you want to have 16 OpenMP
-   threads per rank, then you may use "export OMP_NUM_THREADS=16 && mpirun -n 4 ./test". The problem of this approach is that the non-MUMPS
-   part of your code is run with fewer cores and CPUs are wasted. "-mat_mumps_use_omp_threads [m]" provides an alternative such that
-   you can stil run your code with as many MPI ranks as the number of cores, but have MUMPS run in MPI+OpenMP hybrid mode. In our example,
-   you can use "mpirun -n 64 ./test -mat_mumps_use_omp_threads 16".
-
-   If you run your code through a job submission system, there are caveats in MPI rank mapping. We use MPI_Comm_split_type to get MPI
+   If you run your code through a job submission system, there are caveats in MPI rank mapping. We use MPI_Comm_split_type() to obtain MPI
    processes on each compute node. Listing the processes in rank ascending order, we split processes on a node into consecutive groups of
    size m and create a communicator called omp_comm for each group. Rank 0 in an omp_comm is called the master rank, and others in the omp_comm
    are called slave ranks (or slaves). Only master ranks are seen to MUMPS and slaves are not. We will free CPUs assigned to slaves (might be set
@@ -2502,7 +2585,7 @@ $          MatMumpsGetInfog(mat,....); etc.
    MPI ranks to cores, then with -mat_mumps_use_omp_threads 16, a master rank (and threads it spawns) will use half cores in socket 0, and half
    cores in socket 1, that definitely hurts locality. On the other hand, if you map MPI ranks consecutively on the two sockets, then the
    problem will not happen. Therefore, when you use -mat_mumps_use_omp_threads, you need to keep an eye on your MPI rank mapping and CPU binding.
-   For example, with the Slurm job scheduler, one can use srun --cpu-bind=verbsoe -m block:block to map consecutive MPI ranks to sockets and
+   For example, with the Slurm job scheduler, one can use srun --cpu-bind=verbose -m block:block to map consecutive MPI ranks to sockets and
    examine the mapping result.
 
    PETSc does not control thread binding in MUMPS. So to get best performance, one still has to set OMP_PROC_BIND and OMP_PLACES in job scripts,
@@ -2601,7 +2684,6 @@ static PetscErrorCode MatGetFactor_sbaij_mumps(Mat A,MatFactorType ftype,Mat *F)
 
   PetscFunctionBegin;
   if (ftype != MAT_FACTOR_CHOLESKY) SETERRQ(PetscObjectComm((PetscObject)A),PETSC_ERR_SUP,"Cannot use PETSc SBAIJ matrices with MUMPS LU, use AIJ matrix");
-  if (A->rmap->bs > 1) SETERRQ(PetscObjectComm((PetscObject)A),PETSC_ERR_SUP,"Cannot use PETSc SBAIJ matrices with block size > 1 with MUMPS Cholesky, use AIJ matrix instead");
   ierr = PetscObjectTypeCompare((PetscObject)A,MATSEQSBAIJ,&isSeqSBAIJ);CHKERRQ(ierr);
   /* Create the factorization matrix */
   ierr = MatCreate(PetscObjectComm((PetscObject)A),&B);CHKERRQ(ierr);

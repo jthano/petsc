@@ -15,7 +15,7 @@ class Configure(config.package.GNUPackage):
     self.paroutflg         = ''
     self.haveGNUMake       = 0
     self.publicInstall     = 0  # always install in PETSC_DIR/PETSC_ARCH (not --prefix) since this is not used by users
-    self.parallelMake      = 0  # sowing does not support make -j np
+    self.parallelMake      = 0
     self.executablename    = 'make'
     return
 
@@ -33,7 +33,7 @@ class Configure(config.package.GNUPackage):
   def formGNUConfigureArgs(self):
     '''Does not use the standard arguments at all since this does not use the MPI compilers etc
        Sowing will chose its own compilers if they are not provided explicitly here'''
-    args = ['--prefix='+self.confDir]
+    args = ['--prefix='+self.installDir]
     if 'download-make-cc' in self.argDB and self.argDB['download-make-cc']:
       args.append('CC="'+self.argDB['download-make-cc']+'"')
     if 'download-make-configure-options' in self.argDB and self.argDB['download-make-configure-options']:
@@ -108,6 +108,11 @@ class Configure(config.package.GNUPackage):
         minor = int(gver.group(2))
         if (major,minor) >= self.versionToTuple(self.minversion): haveGNUMake = 1
         if (major > 3): haveGNUMake4 = 1
+        else:
+          self.logPrintBox('***** WARNING: You have an older version of Gnu make, it will work,\n\
+but may not support all the parallel testing options. You can install the \n\
+latest Gnu make with your package manager, such as brew or macports, or use\n\
+the --download-make option to get the latest Gnu make warning message *****')
         self.foundversion = ".".join([str(major),str(minor)])
     except RuntimeError as e:
       self.log.write('GNUMake check failed: '+str(e)+'\n')

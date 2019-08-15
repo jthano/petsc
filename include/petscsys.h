@@ -2,8 +2,8 @@
    This is the main PETSc include file (for C and C++).  It is included by all
    other PETSc include files, so it almost never has to be specifically included.
 */
-#if !defined(__PETSCSYS_H)
-#define __PETSCSYS_H
+#if !defined(PETSCSYS_H)
+#define PETSCSYS_H
 /* ========================================================================== */
 /*
    petscconf.h is contained in ${PETSC_ARCH}/include/petscconf.h it is
@@ -141,7 +141,7 @@ void assert_never_put_petsc_headers_inside_an_extern_c(int); void assert_never_p
       * an extra include path -I/something (which contains the unexpected mpi.h) is being passed to the compiler
 */
 #if defined(PETSC_HAVE_MPIUNI)
-#  if !defined(__MPIUNI_H)
+#  if !defined(MPIUNI_H)
 #    error "PETSc was configured with --with-mpi=0 but now appears to be compiling using a different mpi.h"
 #  endif
 #elif defined(PETSC_HAVE_I_MPI_NUMVERSION)
@@ -421,6 +421,10 @@ PETSC_EXTERN PetscErrorCode PetscSetHelpVersionFunctions(PetscErrorCode (*)(MPI_
 PETSC_EXTERN PetscErrorCode PetscCommDuplicate(MPI_Comm,MPI_Comm*,int*);
 PETSC_EXTERN PetscErrorCode PetscCommDestroy(MPI_Comm*);
 
+#if defined(PETSC_HAVE_CUDA)
+PETSC_EXTERN PetscErrorCode PetscCUDAInitialize(MPI_Comm);
+#endif
+
 /*MC
    PetscMalloc - Allocates memory, One should use PetscNew(), PetscMalloc1() or PetscCalloc1() usually instead of this
 
@@ -446,7 +450,7 @@ PETSC_EXTERN PetscErrorCode PetscCommDestroy(MPI_Comm*);
 .seealso: PetscFree(), PetscNew()
 
 M*/
-#define PetscMalloc(a,b)  ((*PetscTrMalloc)((a),__LINE__,PETSC_FUNCTION_NAME,__FILE__,(void**)(b)))
+#define PetscMalloc(a,b)  ((*PetscTrMalloc)((a),PETSC_FALSE,__LINE__,PETSC_FUNCTION_NAME,__FILE__,(void**)(b)))
 
 /*MC
    PetscRealloc - Rellocates memory
@@ -1123,11 +1127,11 @@ M*/
 
 PETSC_EXTERN PetscErrorCode PetscMallocA(int,PetscBool,int,const char *,const char *,size_t,void *,...);
 PETSC_EXTERN PetscErrorCode PetscFreeA(int,int,const char *,const char *,void *,...);
-PETSC_EXTERN PetscErrorCode (*PetscTrMalloc)(size_t,int,const char[],const char[],void**);
+PETSC_EXTERN PetscErrorCode (*PetscTrMalloc)(size_t,PetscBool,int,const char[],const char[],void**);
 PETSC_EXTERN PetscErrorCode (*PetscTrFree)(void*,int,const char[],const char[]);
 PETSC_EXTERN PetscErrorCode (*PetscTrRealloc)(size_t,int,const char[],const char[],void**);
 PETSC_EXTERN PetscErrorCode PetscMallocSetCoalesce(PetscBool);
-PETSC_EXTERN PetscErrorCode PetscMallocSet(PetscErrorCode (*)(size_t,int,const char[],const char[],void**),PetscErrorCode (*)(void*,int,const char[],const char[]));
+PETSC_EXTERN PetscErrorCode PetscMallocSet(PetscErrorCode (*)(size_t,PetscBool,int,const char[],const char[],void**),PetscErrorCode (*)(void*,int,const char[],const char[]));
 PETSC_EXTERN PetscErrorCode PetscMallocClear(void);
 
 /*
@@ -1331,6 +1335,7 @@ PETSC_EXTERN PetscErrorCode PetscObjectName(PetscObject);
 PETSC_EXTERN PetscErrorCode PetscObjectTypeCompare(PetscObject,const char[],PetscBool *);
 PETSC_EXTERN PetscErrorCode PetscObjectBaseTypeCompare(PetscObject,const char[],PetscBool *);
 PETSC_EXTERN PetscErrorCode PetscObjectTypeCompareAny(PetscObject,PetscBool*,const char[],...);
+PETSC_EXTERN PetscErrorCode PetscObjectBaseTypeCompareAny(PetscObject,PetscBool*,const char[],...);
 PETSC_EXTERN PetscErrorCode PetscRegisterFinalize(PetscErrorCode (*)(void));
 PETSC_EXTERN PetscErrorCode PetscRegisterFinalizeAll(void);
 
@@ -1506,9 +1511,7 @@ PETSC_EXTERN PetscErrorCode PetscScalarView(PetscInt,const PetscScalar[],PetscVi
 
 #include <stddef.h>
 #include <string.h>             /* for memcpy, memset */
-#if defined(PETSC_HAVE_STDLIB_H)
 #include <stdlib.h>
-#endif
 
 #if defined(PETSC_HAVE_XMMINTRIN_H) && !defined(__CUDACC__)
 #include <xmmintrin.h>
@@ -1716,7 +1719,7 @@ PETSC_STATIC_INLINE PetscErrorCode  PetscMemzero(void *a,size_t n)
 .seealso: PetscMemcpy(), PetscMemcmp(), PetscArrayzero(), PetscMemzero(), PetscArraycpy(), PetscMemmove(), PetscStrallocpy(),
           PetscArraymove()
 M*/
-#define  PetscArraycmp(str1,str2,cnt,e) ((sizeof(*(str1)) != sizeof(*(str2))) || PetscMemcmp(str1,str2,(cnt)*sizeof(*(str1)),e));
+#define  PetscArraycmp(str1,str2,cnt,e) ((sizeof(*(str1)) != sizeof(*(str2))) || PetscMemcmp(str1,str2,(cnt)*sizeof(*(str1)),e))
 
 /*MC
    PetscArraymove - Copies from one array in memory to another, the arrays may overlap. Use PetscArraycpy() when the arrays
@@ -1741,7 +1744,7 @@ M*/
 
 .seealso: PetscMemcpy(), PetscMemcmp(), PetscArrayzero(), PetscMemzero(), PetscArraycpy(), PetscMemmove(), PetscArraycmp(), PetscStrallocpy()
 M*/
-#define  PetscArraymove(str1,str2,cnt) ((sizeof(*(str1)) != sizeof(*(str2))) || PetscMemmove(str1,str2,(cnt)*sizeof(*(str1))));
+#define  PetscArraymove(str1,str2,cnt) ((sizeof(*(str1)) != sizeof(*(str2))) || PetscMemmove(str1,str2,(cnt)*sizeof(*(str1))))
 
 /*MC
    PetscArraycpy - Copies from one array in memory to another
@@ -1753,8 +1756,8 @@ M*/
    Not Collective
 
    Input Parameters:
-+  str1 - First array
-.  str2 - Second array
++  str1 - First array (destination)
+.  str2 - Second array (source)
 -  cnt  - Count of the array, not in bytes, but number of entries in the arrays
 
    Level: intermediate
@@ -1765,7 +1768,7 @@ M*/
 
 .seealso: PetscMemcpy(), PetscMemcmp(), PetscArrayzero(), PetscMemzero(), PetscArraymove(), PetscMemmove(), PetscArraycmp(), PetscStrallocpy()
 M*/
-#define  PetscArraycpy(str1,str2,cnt) ((sizeof(*(str1)) != sizeof(*(str2))) || PetscMemcpy(str1,str2,(cnt)*sizeof(*(str1))));
+#define  PetscArraycpy(str1,str2,cnt) ((sizeof(*(str1)) != sizeof(*(str2))) || PetscMemcpy(str1,str2,(cnt)*sizeof(*(str1))))
 
 /*MC
    PetscArrayzero - Zeros an array in memory.
@@ -1787,7 +1790,7 @@ M*/
 
 .seealso: PetscMemcpy(), PetscMemcmp(), PetscMemzero(), PetscArraycmp(), PetscArraycpy(), PetscMemmove(), PetscStrallocpy(), PetscArraymove()
 M*/
-#define  PetscArrayzero(str1,cnt) PetscMemzero(str1,(cnt)*sizeof(*(str1)));
+#define  PetscArrayzero(str1,cnt) PetscMemzero(str1,(cnt)*sizeof(*(str1)))
 
 /*MC
    PetscPrefetchBlock - Prefetches a block of memory
@@ -1935,6 +1938,36 @@ PETSC_EXTERN PetscErrorCode MPIU_File_read_all(MPI_File,void*,PetscMPIInt,MPI_Da
 #define PETSC_BLAS_INT_MIN -2147483647
 
 /*@C
+    PetscIntCast - casts a PetscInt64 (which is 64 bits in size) to a PetscInt (which may be 32 bits in size), generates an
+         error if the PetscInt is not large enough to hold the number.
+
+   Not Collective
+
+   Input Parameter:
+.     a - the PetscInt64 value
+
+   Output Parameter:
+.     b - the resulting PetscInt value
+
+   Level: advanced
+
+   Notes: If integers needed for the applications are too large to fit in 32 bit ints you can ./configure using --with-64-bit-indices to make PetscInt use 64 bit ints
+
+   Not available from Fortran
+
+.seealso: PetscBLASInt, PetscMPIInt, PetscInt, PetscMPIIntCast(), PetscBLASIntCast()
+@*/
+PETSC_STATIC_INLINE PetscErrorCode PetscIntCast(PetscInt64 a,PetscInt *b)
+{
+  PetscFunctionBegin;
+#if !defined(PETSC_USE_64BIT_INDICES)
+  if ((a) > PETSC_MAX_INT) SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Integer too long for PetscInt, you may need to ./configure using --with-64-bit-indices");
+#endif
+  *b =  (PetscInt)(a);
+  PetscFunctionReturn(0);
+}
+
+/*@C
     PetscBLASIntCast - casts a PetscInt (which may be 64 bits in size) to a PetscBLASInt (which may be 32 bits in size), generates an
          error if the PetscBLASInt is not large enough to hold the number.
 
@@ -1950,15 +1983,16 @@ PETSC_EXTERN PetscErrorCode MPIU_File_read_all(MPI_File,void*,PetscMPIInt,MPI_Da
 
    Not available from Fortran
 
-.seealso: PetscBLASInt, PetscMPIInt, PetscInt, PetscMPIIntCast()
+.seealso: PetscBLASInt, PetscMPIInt, PetscInt, PetscMPIIntCast(), PetscIntCast()
 @*/
 PETSC_STATIC_INLINE PetscErrorCode PetscBLASIntCast(PetscInt a,PetscBLASInt *b)
 {
   PetscFunctionBegin;
-  *b =  (PetscBLASInt)(a);
 #if defined(PETSC_USE_64BIT_INDICES) && !defined(PETSC_HAVE_64BIT_BLAS_INDICES)
+  *b = 0;
   if ((a) > PETSC_BLAS_INT_MAX) SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Array too long for BLAS/LAPACK");
 #endif
+  *b =  (PetscBLASInt)(a);
   PetscFunctionReturn(0);
 }
 
@@ -1978,15 +2012,16 @@ PETSC_STATIC_INLINE PetscErrorCode PetscBLASIntCast(PetscInt a,PetscBLASInt *b)
 
    Not available from Fortran
 
-.seealso: PetscBLASInt, PetscMPIInt, PetscInt, PetscBLASIntCast()
+.seealso: PetscBLASInt, PetscMPIInt, PetscInt, PetscBLASIntCast(), PetscIntCast()
 @*/
 PETSC_STATIC_INLINE PetscErrorCode PetscMPIIntCast(PetscInt a,PetscMPIInt *b)
 {
   PetscFunctionBegin;
-  *b =  (PetscMPIInt)(a);
 #if defined(PETSC_USE_64BIT_INDICES)
+  *b = 0;
   if ((a) > PETSC_MPI_INT_MAX) SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Array too long for MPI");
 #endif
+  *b =  (PetscMPIInt)(a);
   PetscFunctionReturn(0);
 }
 
@@ -2468,7 +2503,7 @@ PETSC_EXTERN PetscErrorCode PetscSegBufferUnuse(PetscSegBuffer,size_t);
 /* Type-safe wrapper to encourage use of PETSC_RESTRICT. Does not use PetscFunctionBegin because the error handling
  * prevents the compiler from completely erasing the stub. This is called in inner loops so it has to be as fast as
  * possible. */
-PETSC_STATIC_INLINE PetscErrorCode PetscSegBufferGetInts(PetscSegBuffer seg,PetscInt count,PetscInt *PETSC_RESTRICT *slot) {return PetscSegBufferGet(seg,(size_t)count,(void**)slot);}
+PETSC_STATIC_INLINE PetscErrorCode PetscSegBufferGetInts(PetscSegBuffer seg,size_t count,PetscInt *PETSC_RESTRICT *slot) {return PetscSegBufferGet(seg,count,(void**)slot);}
 
 extern PetscOptionsHelpPrinted PetscOptionsHelpPrintedSingleton;
 PETSC_EXTERN PetscErrorCode PetscOptionsHelpPrintedDestroy(PetscOptionsHelpPrinted*);

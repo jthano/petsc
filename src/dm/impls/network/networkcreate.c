@@ -260,9 +260,10 @@ static PetscErrorCode DMCreateLocalVector_Network(DM dm,Vec *vec)
 
 PetscErrorCode DMInitialize_Network(DM dm)
 {
+  PetscErrorCode ierr;
 
   PetscFunctionBegin;
-
+  ierr = DMSetDimension(dm,1); CHKERRQ(ierr);
   dm->ops->view                            = DMView_Network;
   dm->ops->setfromoptions                  = DMSetFromOptions_Network;
   dm->ops->clone                           = DMClone_Network;
@@ -275,8 +276,7 @@ PetscErrorCode DMInitialize_Network(DM dm)
   dm->ops->getcoloring                     = 0;
   dm->ops->creatematrix                    = DMCreateMatrix_Network;
   dm->ops->createinterpolation             = 0;
-  dm->ops->getaggregates                   = 0;
-  dm->ops->getinjection                    = 0;
+  dm->ops->createinjection                 = 0;
   dm->ops->refine                          = 0;
   dm->ops->coarsen                         = 0;
   dm->ops->refinehierarchy                 = 0;

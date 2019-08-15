@@ -36,16 +36,16 @@ static PetscErrorCode MatPartitioningApply_Average(MatPartitioning part,IS *part
   PetscInt       m,M,nparts,*indices,r,d,*parts,i,start,end,loc;
 
   PetscFunctionBegin;
-  ierr = MatGetSize(part->adj,&M,NULL);CHKERRQ(ierr);
-  ierr = MatGetLocalSize(part->adj,&m,NULL);CHKERRQ(ierr);
+  ierr   = MatGetSize(part->adj,&M,NULL);CHKERRQ(ierr);
+  ierr   = MatGetLocalSize(part->adj,&m,NULL);CHKERRQ(ierr);
   nparts = part->n;
-  ierr = PetscCalloc1(nparts,&parts);CHKERRQ(ierr);
-  d = M/nparts;
+  ierr   = PetscMalloc1(nparts,&parts);CHKERRQ(ierr);
+  d      = M/nparts;
   for (i=0; i<nparts; i++) parts[i] = d;
   r = M%nparts;
   for (i=0; i<r; i++) parts[i] += 1;
   for (i=1; i<nparts; i++) parts[i] += parts[i-1];
-  ierr = PetscCalloc1(m,&indices);CHKERRQ(ierr);
+  ierr = PetscMalloc1(m,&indices);CHKERRQ(ierr);
   ierr = MatGetOwnershipRange(part->adj,&start,&end);CHKERRQ(ierr);
   for (i=start; i<end; i++) {
     ierr = PetscFindInt(i,nparts,parts,&loc);CHKERRQ(ierr);
@@ -235,8 +235,8 @@ PetscErrorCode  MatPartitioningGetType(MatPartitioning partitioning,MatPartition
    Not collective
 
    Input Parameter:
-.  partitioning - the partitioning context
-.  n - the number of partitions
++  partitioning - the partitioning context
+-  n - the number of partitions
 
    Level: intermediate
 
@@ -359,8 +359,8 @@ PetscErrorCode  MatPartitioningApply(MatPartitioning matp,IS *partitioning)
    Collective on Mat
 
    Input Parameters:
-.  matp - the matrix partitioning object
-.  partitioning - the partitioning. For each local node this tells the processor
++  matp - the matrix partitioning object
+-  partitioning - the partitioning. For each local node this tells the processor
                    number that that node is assigned to.
 
    Output Parameters:
@@ -401,8 +401,8 @@ PetscErrorCode  MatPartitioningImprove(MatPartitioning matp,IS *partitioning)
    Collective on MatPartitioning
 
    Input Parameters:
-.  matp - the matrix partitioning object
-.  partitioning - the partitioning. For each local node this tells the processor
++  matp - the matrix partitioning object
+-  partitioning - the partitioning. For each local node this tells the processor
                    number that that node is assigned to.
 
    Options Database Keys:
@@ -608,8 +608,8 @@ PetscErrorCode  MatPartitioningCreate(MPI_Comm comm,MatPartitioning *newp)
    Collective on MatPartitioning
 
    Input Parameters:
-.  part - the partitioning context
-.  viewer - optional visualization context
++  part - the partitioning context
+-  viewer - optional visualization context
 
    Level: intermediate
 
@@ -660,8 +660,8 @@ PetscErrorCode  MatPartitioningView(MatPartitioning part,PetscViewer viewer)
    Collective on MatPartitioning
 
    Input Parameter:
-.  part - the partitioning context.
-.  type - a known method
++  part - the partitioning context.
+-  type - a known method
 
    Options Database Command:
 $  -mat_partitioning_type  <type>

@@ -50,6 +50,8 @@ class Configure(config.package.Package):
     self.alternativedownload = 'mpich'
     # support MPI-3 process shared memory
     self.support_mpi3_shm = 0
+    # support MPI-3 non-blocking collectives
+    self.support_mpi3_nbc = 0
     self.mpi_pkg_version  = ''
     return
 
@@ -145,7 +147,7 @@ class Configure(config.package.Package):
         if not 'known-mpi-shared-libraries' in self.argDB:
           self.logPrintBox('***** WARNING: Cannot verify that MPI is a shared library - in\n\
 batch-mode! If MPI is a static library but linked into multiple shared\n\
-libraries that the application uses, sometimes compiles go through -\n\
+libraries that the application uses, sometimes compiles work -\n\
 but one might get run-time errors. If you know that the MPI library is\n\
 shared - run with --known-mpi-shared-libraries=1 option to remove this\n\
 warning message *****')
@@ -153,14 +155,14 @@ warning message *****')
           raise RuntimeError('Provided MPI library is flagged as static library! If its linked\n\
 into multipe shared libraries that an application uses, sometimes\n\
 compiles go through - but one might get run-time errors.  Either\n\
-rebuild PETSc with --with-shared-libraries=0 or provide MPI with\n\
-shared libraries and flag it with --known-mpi-shared-libraries=1')
+reconfigure PETSc with --with-shared-libraries=0 or provide MPI with\n\
+shared libraries and run with --known-mpi-shared-libraries=1')
       return
     try:
       self.shared = self.libraries.checkShared('#include <mpi.h>\n','MPI_Init','MPI_Initialized','MPI_Finalize',checkLink = self.checkPackageLink,libraries = self.lib, defaultArg = 'known-mpi-shared-libraries', executor = self.mpiexec)
     except RuntimeError as e:
       if self.argDB['with-shared-libraries']:
-        raise RuntimeError('Shared libraries cannot be built using MPI provided.\nEither rebuild with --with-shared-libraries=0 or rebuild MPI with shared library support')
+        raise RuntimeError('Shared libraries cannot be built using MPI provided.\nEither reconfigure with --with-shared-libraries=0 or rebuild MPI with shared library support')
       self.logPrint('MPI libraries cannot be used with shared libraries')
       self.shared = 0
     return
@@ -252,43 +254,36 @@ shared libraries and flag it with --known-mpi-shared-libraries=1')
     self.framework.saveLog()
     if self.libraries.check(self.dlib, "MPI_Win_create"):
       self.addDefine('HAVE_MPI_WIN_CREATE',1)
-      self.addDefine('HAVE_MPI_REPLACE',1) # MPI_REPLACE is strictly for use with the one-sided function MPI_Accumulate
     if self.checkLink('#include <mpi.h>\n', 'MPI_Comm scomm; if (MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, 0, MPI_INFO_NULL, &scomm));\n'):
       self.haveMPISharedComm = 1
       self.addDefine('HAVE_MPI_SHARED_COMM', 1)
     else: self.haveMPISharedComm = 0
-    if self.checkLink('#include <mpi.h>\n', 'MPI_Win win; if (MPI_Win_allocate_shared(100,10,MPI_INFO_NULL,MPI_COMM_WORLD, 0, &win));\n'):
-      self.addDefine('HAVE_MPI_WIN_ALLOCATE_SHARED', 1)
-    if self.checkLink('#include <mpi.h>\n', 'if (MPI_Win_shared_query(MPI_WIN_NULL,0,0,0,0));\n'):
-      self.addDefine('HAVE_MPI_WIN_SHARED_QUERY', 1)
     if 'HAVE_MPI_WIN_CREATE' in self.defines and 'HAVE_MPI_WIN_ALLOCATE_SHARED' in self.defines and 'HAVE_MPI_WIN_SHARED_QUERY' in self.defines:
       if (hasattr(self, 'mpich_numversion') and int(self.mpich_numversion) > 30004300) or not hasattr(self, 'mpich_numversion'):
         self.addDefine('HAVE_MPI_WIN_CREATE_FEATURE',1)
         self.addDefine('HAVE_MPI_PROCESS_SHARED_MEMORY',1)
         self.support_mpi3_shm = 1
+    if self.checkLink('#include <mpi.h>\n',
+                      'int send=0,recv,counts[2]={1,1},displs[2]={1,2}; MPI_Request req;\n\
+                       if (MPI_Iscatter(&send,1,MPI_INT,&recv,1,MPI_INT,0,MPI_COMM_WORLD,&req));\n \
+                       if (MPI_Iscatterv(&send,counts,displs,MPI_INT,&recv,1,MPI_INT,0,MPI_COMM_WORLD,&req));\n \
+                       if (MPI_Igather(&send,1,MPI_INT,&recv,1,MPI_INT,0,MPI_COMM_WORLD,&req));\n \
+                       if (MPI_Igatherv(&send,1,MPI_INT,&recv,counts,displs,MPI_INT,0,MPI_COMM_WORLD,&req));\n \
+                       if (MPI_Iallgather(&send,1,MPI_INT,&recv,1,MPI_INT,MPI_COMM_WORLD,&req));\n \
+                       if (MPI_Iallgatherv(&send,1,MPI_INT,&recv,counts,displs,MPI_INT,MPI_COMM_WORLD,&req));\n \
+                       if (MPI_Ialltoall(&send,1,MPI_INT,&recv,1,MPI_INT,MPI_COMM_WORLD,&req));\n'):
+      self.addDefine('HAVE_MPI_NONBLOCKING_COLLECTIVES', 1)
+      self.support_mpi3_nbc = 1
+    if self.checkLink('#include <mpi.h>\n',
+                      'MPI_Comm distcomm; \n\
+                       MPI_Request req; \n\
+                       if (MPI_Dist_graph_create_adjacent(MPI_COMM_WORLD,0,0,MPI_WEIGHTS_EMPTY,0,0,MPI_WEIGHTS_EMPTY,MPI_INFO_NULL,0,&distcomm));\n\
+                       if (MPI_Neighbor_alltoallv(0,0,0,MPI_INT,0,0,0,MPI_INT,distcomm));\n\
+                       if (MPI_Ineighbor_alltoallv(0,0,0,MPI_INT,0,0,0,MPI_INT,distcomm,&req));\n'):
+      self.addDefine('HAVE_MPI_NEIGHBORHOOD_COLLECTIVES',1)
     self.compilers.CPPFLAGS = oldFlags
     self.compilers.LIBS = oldLibs
     self.logWrite(self.framework.restoreLog())
-    return
-
-  def configureConversion(self):
-    '''Check for the functions which convert communicators between C and Fortran
-       - Define HAVE_MPI_COMM_F2C and HAVE_MPI_COMM_C2F if they are present
-       - Some older MPI 1 implementations are missing these'''
-    oldFlags = self.compilers.CPPFLAGS
-    oldLibs  = self.compilers.LIBS
-    self.compilers.CPPFLAGS += ' '+self.headers.toString(self.include)
-    self.compilers.LIBS = self.libraries.toString(self.lib)+' '+self.compilers.LIBS
-    if self.checkLink('#include <mpi.h>\n', 'if (MPI_Comm_f2c((MPI_Fint)0));\n'):
-      self.commf2c = 1
-      self.addDefine('HAVE_MPI_COMM_F2C', 1)
-    if self.checkLink('#include <mpi.h>\n', 'if (MPI_Comm_c2f(MPI_COMM_WORLD));\n'):
-      self.commc2f = 1
-      self.addDefine('HAVE_MPI_COMM_C2F', 1)
-    if self.checkLink('#include <mpi.h>\n', 'MPI_Fint a;\n'):
-      self.addDefine('HAVE_MPI_FINT', 1)
-    self.compilers.CPPFLAGS = oldFlags
-    self.compilers.LIBS = oldLibs
     return
 
   def configureTypes(self):
@@ -297,9 +292,6 @@ shared libraries and flag it with --known-mpi-shared-libraries=1')
     self.compilers.CPPFLAGS += ' '+self.headers.toString(self.include)
     self.framework.batchIncludeDirs.extend([self.headers.getIncludeArgument(inc) for inc in self.include])
     self.framework.addBatchLib(self.lib)
-    self.types.checkSizeof('MPI_Comm',(4,8),'mpi.h')
-    if 'HAVE_MPI_FINT' in self.defines:
-      self.types.checkSizeof('MPI_Fint',(4,8),'mpi.h')
     self.compilers.CPPFLAGS = oldFlags
     return
 
@@ -312,8 +304,8 @@ shared libraries and flag it with --known-mpi-shared-libraries=1')
     mpitypes = [('MPI_LONG_DOUBLE', 'long-double'), ('MPI_INT64_T', 'int64_t')]
     if self.getDefaultLanguage() == 'C': mpitypes.extend([('MPI_C_DOUBLE_COMPLEX', 'c-double-complex')])
     for datatype, name in mpitypes:
-      includes = '#ifdef PETSC_HAVE_STDLIB_H\n  #include <stdlib.h>\n#endif\n#include <mpi.h>\n'
-      body     = 'MPI_Aint size;\nint ierr;\nMPI_Init(0,0);\nierr = MPI_Type_extent('+datatype+', &size);\nif(ierr || (size == 0)) exit(1);\nMPI_Finalize();\n'
+      includes = '#include <stdlib.h>\n#include <mpi.h>\n'
+      body     = 'int size;\nint ierr;\nMPI_Init(0,0);\nierr = MPI_Type_size('+datatype+', &size);\nif(ierr || (size == 0)) exit(1);\nMPI_Finalize();\n'
       if self.checkCompile(includes, body):
         if 'known-mpi-'+name in self.argDB:
           if int(self.argDB['known-mpi-'+name]):
@@ -324,24 +316,11 @@ shared libraries and flag it with --known-mpi-shared-libraries=1')
             self.addDefine('HAVE_'+datatype, 1)
           self.popLanguage()
         else:
-          if self.needBatchMPI:
-            self.framework.addBatchSetup('if (MPI_Init(&argc, &argv));')
-            self.framework.addBatchCleanup('if (MPI_Finalize());')
-            self.needBatchMPI = 0
-          self.framework.addBatchInclude(['#include <stdlib.h>', '#define MPICH_IGNORE_CXX_SEEK', '#define MPICH_SKIP_MPICXX 1', '#define OMPI_SKIP_MPICXX 1', '#include <mpi.h>'])
-          self.framework.addBatchBody('''
-{
-  MPI_Aint size=0;
-  int ierr=0;
-  if (MPI_LONG_DOUBLE != MPI_DATATYPE_NULL) {
-    ierr = MPI_Type_extent(%s, &size);
-  }
-  if(!ierr && (size != 0)) {
-    fprintf(output, "  \'--known-mpi-%s=1\',\\n");
-  } else {
-    fprintf(output, "  \'--known-mpi-%s=0\',\\n");
-  }
-}''' % (datatype, name, name))
+         self.logPrintBox('***** WARNING: Cannot determine if '+datatype+' works on your system\n\
+in batch-mode! Assuming it does work. Run with --known-mpi-'+name+'=0\n\
+if you know it does not work (very unlikely). Run with --known-mpi-'+name+'=1\n\
+to remove this warning message *****')
+         self.addDefine('HAVE_'+datatype, 1)
     self.compilers.CPPFLAGS = oldFlags
     self.compilers.LIBS = oldLibs
     return
@@ -353,9 +332,6 @@ shared libraries and flag it with --known-mpi-shared-libraries=1')
     self.framework.packages.append(self)
     self.mpiexec = '${PETSC_DIR}/lib/petsc/bin/petsc-mpiexec.uni'
     self.addMakeMacro('MPIEXEC','${PETSC_DIR}/lib/petsc/bin/petsc-mpiexec.uni')
-    self.addDefine('HAVE_MPI_COMM_F2C', 1)
-    self.addDefine('HAVE_MPI_COMM_C2F', 1)
-    self.addDefine('HAVE_MPI_FINT', 1)
     self.addDefine('HAVE_MPI_IN_PLACE', 1)
     self.addDefine('HAVE_MPI_TYPE_DUP', 1)
     self.addDefine('HAVE_MPI_TYPE_GET_ENVELOPE', 1)
@@ -370,16 +346,6 @@ shared libraries and flag it with --known-mpi-shared-libraries=1')
     self.usingMPIUni = 1
     self.version = 'PETSc MPIUNI uniprocessor MPI replacement'
     self.executeTest(self.PetscArchMPICheck)
-    return
-
-  def configureMissingPrototypes(self):
-    '''Checks for missing prototypes, which it adds to petscfix.h'''
-    if not 'HAVE_MPI_FINT' in self.defines:
-      self.addPrototype('typedef int MPI_Fint;')
-    if not 'HAVE_MPI_COMM_F2C' in self.defines:
-      self.addPrototype('#define MPI_Comm_f2c(a) (a)')
-    if not 'HAVE_MPI_COMM_C2F' in self.defines:
-      self.addPrototype('#define MPI_Comm_c2f(a) (a)')
     return
 
   def checkDownload(self):
@@ -476,6 +442,8 @@ shared libraries and flag it with --known-mpi-shared-libraries=1')
       self.compilers.CPPFLAGS = oldFlags
       self.compilers.LIBS = oldLibs
       return
+    # MSWIN has buggy MPI IO
+    if 'HAVE_LIBMSMPI' in self.defines: return
     self.addDefine('HAVE_MPIIO', 1)
     self.compilers.CPPFLAGS = oldFlags
     self.compilers.LIBS = oldLibs
@@ -580,26 +548,30 @@ shared libraries and flag it with --known-mpi-shared-libraries=1')
 
 
   def configureLibrary(self):
+    import platform
     '''Calls the regular package configureLibrary and then does an additional test needed by MPI'''
     if 'with-'+self.package+'-shared' in self.argDB:
       self.argDB['with-'+self.package] = 1
     config.package.Package.configureLibrary(self)
-    self.executeTest(self.configureConversion)
     self.executeTest(self.checkMPICHorOpenMPI)
+    if any(x in platform.processor() for x in ['i386','x86','i86pc']) and config.setCompilers.Configure.isSolaris(self.log) and hasattr(self, 'mpich_numversion') and int(self.mpich_numversion) >= 30301300:
+      # this is only needed if MPICH/HWLOC were compiled with optimization
+      self.logWrite('Setting environmental variable to work around buggy HWLOC\nhttps://github.com/open-mpi/hwloc/issues/290\n')
+      os.environ['HWLOC_COMPONENTS'] = '-x86'
+      self.addDefine('HAVE_HWLOC_SOLARIS_BUG',1)
+      self.logPrintBox('***** WARNING: This MPI implementation may have a bug in it that causes programs to hang.\n\
+You may need to set the environmental variable HWLOC_COMPONENTS to -x86 to prevent such hangs. warning message *****')
     self.executeTest(self.configureMPI2)
     self.executeTest(self.configureMPI3) #depends on checkMPICHorOpenMPI for self.mpich_numversion
     self.executeTest(self.configureTypes)
     self.executeTest(self.configureMPITypes)
-    self.executeTest(self.configureMissingPrototypes)
     self.executeTest(self.SGIMPICheck)
     self.executeTest(self.CxxMPICheck)
     self.executeTest(self.FortranMPICheck)
     self.executeTest(self.configureIO)
     self.executeTest(self.findMPIInc)
     self.executeTest(self.PetscArchMPICheck)
-    if self.libraries.check(self.dlib, "MPI_Alltoallw") and self.libraries.check(self.dlib, "MPI_Type_create_indexed_block"):
-      self.addDefine('HAVE_MPI_ALLTOALLW',1)
-    funcs = '''MPI_Comm_spawn MPI_Type_get_envelope MPI_Type_get_extent MPI_Type_dup MPI_Init_thread
+    funcs = '''MPI_Type_get_envelope  MPI_Type_dup MPI_Init_thread
       MPI_Iallreduce MPI_Ibarrier MPI_Finalized MPI_Exscan MPI_Reduce_scatter MPI_Reduce_scatter_block'''.split()
     found, missing = self.libraries.checkClassify(self.dlib, funcs)
     for f in found:

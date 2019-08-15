@@ -2,8 +2,8 @@
    An index set is a generalization of a subset of integers.  Index sets
    are used for defining scatters and gathers.
 */
-#if !defined(__PETSCIS_H)
-#define __PETSCIS_H
+#if !defined(PETSCIS_H)
+#define PETSCIS_H
 #include <petscsys.h>
 #include <petscsftypes.h>
 #include <petscistypes.h>    /*I  "petscis.h" I*/
@@ -191,8 +191,8 @@ PETSC_EXTERN PetscErrorCode ISColoringCreate(MPI_Comm,PetscInt,PetscInt,const IS
 PETSC_EXTERN PetscErrorCode ISColoringDestroy(ISColoring*);
 PETSC_EXTERN PetscErrorCode ISColoringView(ISColoring,PetscViewer);
 PETSC_EXTERN PetscErrorCode ISColoringViewFromOptions(ISColoring,PetscObject,const char[]);
-PETSC_EXTERN PetscErrorCode ISColoringGetIS(ISColoring,PetscInt*,IS*[]);
-PETSC_EXTERN PetscErrorCode ISColoringRestoreIS(ISColoring,IS*[]);
+PETSC_EXTERN PetscErrorCode ISColoringGetIS(ISColoring,PetscCopyMode,PetscInt*,IS*[]);
+PETSC_EXTERN PetscErrorCode ISColoringRestoreIS(ISColoring,PetscCopyMode,IS*[]);
 PETSC_EXTERN PetscErrorCode ISColoringReference(ISColoring);
 PETSC_EXTERN PetscErrorCode ISColoringSetType(ISColoring,ISColoringType);
 

@@ -697,7 +697,7 @@ static PetscErrorCode DMPlexFillMatrix_Static(DM dm, PetscLayout rLayout, PetscI
 . onz  - An array to hold the number of nonzeros in the off-diagonal block
 . dnzu - An array to hold the number of nonzeros in the upper triangle of the diagonal block
 . onzu - An array to hold the number of nonzeros in the upper triangle of the off-diagonal block
-. fillMatrix - If PETSC_TRUE, fill the matrix with zeros
+- fillMatrix - If PETSC_TRUE, fill the matrix with zeros
 
   Ouput Argument:
 . A - The preallocated matrix
@@ -843,7 +843,7 @@ PetscErrorCode DMPlexPreallocateOperator_2(DM dm, PetscInt bs, PetscSection sect
   ierr = PetscSFBcastBegin(sf,MPIU_INT,visits,lvisits);CHKERRQ(ierr);
   ierr = PetscSFBcastEnd  (sf,MPIU_INT,visits,lvisits);CHKERRQ(ierr);
 
-  ierr = PetscSFGetRanks();CHKERRQ(ierr);
+  ierr = PetscSFGetRootRanks();CHKERRQ(ierr);
 
 
   ierr = PetscMalloc2(maxClosureSize*maxClosureSize,&cellmat,npoints,&owner);CHKERRQ(ierr);

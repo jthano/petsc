@@ -164,7 +164,7 @@ class Configure(config.base.Configure):
   def isClang(compiler, log):
     '''Returns true if the compiler is a Clang/LLVM compiler'''
     try:
-      (output, error, status) = config.base.Configure.executeShellCommand(compiler+' --help | head -n 20', log = log)
+      (output, error, status) = config.base.Configure.executeShellCommand(compiler+' --help | head -n 500', log = log)
       output = output + error
       return any([s in output for s in ['Emit Clang AST']])
     except RuntimeError:
@@ -500,6 +500,10 @@ class Configure(config.base.Configure):
     '''Determine the C compiler '''
     if hasattr(self, 'CC'):
       yield self.CC
+      if self.argDB['download-mpich']: mesg ='with downloaded MPICH'
+      elif self.argDB['download-openmpi']: mesg ='with downloaded OpenMPI'
+      else: mesg = ''
+      raise RuntimeError('Error '+mesg+': '+self.mesg)
     elif 'with-cc' in self.argDB:
       if self.isWindows(self.argDB['with-cc'], self.log):
         yield 'win32fe '+self.argDB['with-cc']
@@ -568,6 +572,10 @@ class Configure(config.base.Configure):
         del self.CC
     if not hasattr(self, 'CC'):
       raise RuntimeError('Could not locate a functional C compiler')
+    try:
+      self.executeShellCommand(self.CC+' --version', log = self.log)
+    except:
+      pass
     return
 
   def generateCPreprocessorGuesses(self):
@@ -602,6 +610,7 @@ class Configure(config.base.Configure):
        - Any given category can be excluded'''
     if hasattr(self, 'CUDAC'):
       yield self.CUDAC
+      raise RuntimeError('Error: '+self.mesg)
     elif 'with-cudac' in self.argDB:
       yield self.argDB['with-cudac']
       raise RuntimeError('CUDA compiler you provided with -with-cudac='+self.argDB['with-cudac']+' does not work.'+'\n'+self.mesg)
@@ -678,6 +687,10 @@ class Configure(config.base.Configure):
 
     if hasattr(self, 'CXX'):
       yield self.CXX
+      if self.argDB['download-mpich']: mesg ='with downloaded MPICH'
+      elif self.argDB['download-openmpi']: mesg ='with downloaded OpenMPI'
+      else: mesg = ''
+      raise RuntimeError('Error '+mesg+': '+self.mesg)
     elif 'with-c++' in self.argDB:
       raise RuntimeError('Keyword --with-c++ is WRONG, use --with-cxx')
     if 'with-CC' in self.argDB:
@@ -770,6 +783,10 @@ class Configure(config.base.Configure):
           self.delMakeMacro('CXX')
           del self.CXX
       if hasattr(self, 'CXX'):
+        try:
+          self.executeShellCommand(self.CXX+' --version', log = self.log)
+        except:
+          pass
         break
     return
 
@@ -812,6 +829,10 @@ class Configure(config.base.Configure):
 
     if hasattr(self, 'FC'):
       yield self.FC
+      if self.argDB['download-mpich']: mesg ='with downloaded MPICH'
+      elif self.argDB['download-openmpi']: mesg ='with downloaded OpenMPI'
+      else: mesg = ''
+      raise RuntimeError('Error '+mesg+': '+self.mesg)
     elif 'with-fc' in self.argDB:
       if self.isWindows(self.argDB['with-fc'], self.log):
         yield 'win32fe '+self.argDB['with-fc']
@@ -894,6 +915,11 @@ class Configure(config.base.Configure):
           self.logPrint(' MPI installation '+str(self.FC)+' is likely incorrect.\n  Use --with-mpi-dir to indicate an alternate MPI.')
         self.delMakeMacro('FC')
         del self.FC
+    if hasattr(self, 'FC'):
+      try:
+        self.executeShellCommand(self.FC+' --version', log = self.log)
+      except:
+        pass
     return
 
   def checkFortranComments(self):
@@ -1206,7 +1232,7 @@ class Configure(config.base.Configure):
       yield (self.argDB['LD_SHARED'], [], 'so')
     if Configure.isDarwin(self.log):
       if 'with-shared-ld' in self.argDB:
-        yield (self.argDB['with-dynamic-ld'], ['-dynamiclib -single_module', '-undefined dynamic_lookup', '-multiply_defined suppress'], '-no_compact_unwind', 'dylib')
+        yield (self.argDB['with-shared-ld'], ['-dynamiclib -single_module', '-undefined dynamic_lookup', '-multiply_defined suppress', '-no_compact_unwind'], 'dylib')
       if hasattr(self, 'CXX') and self.mainLanguage == 'Cxx':
         yield (self.CXX, ['-dynamiclib -single_module', '-undefined dynamic_lookup', '-multiply_defined suppress', '-no_compact_unwind'], 'dylib')
       yield (self.CC, ['-dynamiclib -single_module', '-undefined dynamic_lookup', '-multiply_defined suppress', '-no_compact_unwind'], 'dylib')
@@ -1324,6 +1350,24 @@ class Configure(config.base.Configure):
     for language in languages:
       self.pushLanguage(language)
       for testFlag in ['-Wl,-multiply_defined,suppress', '-Wl,-multiply_defined -Wl,suppress', '-Wl,-commons,use_dylibs', '-Wl,-search_paths_first', '-Wl,-no_compact_unwind']:
+        if self.checkLinkerFlag(testFlag):
+          # expand to CC_LINKER_FLAGS or CXX_LINKER_FLAGS or FC_LINKER_FLAGS
+          linker_flag_var = langMap[language]+'_LINKER_FLAGS'
+          val = getattr(self,linker_flag_var)
+          val.append(testFlag)
+          setattr(self,linker_flag_var,val)
+      self.popLanguage()
+    return
+
+  def checkLinkerWindows(self):
+    '''Turns off linker warning about unknown .o files extension'''
+    langMap = {'C':'CC','FC':'FC','Cxx':'CXX','CUDA':'CUDAC'}
+    languages = ['C']
+    if hasattr(self, 'CXX'):
+      languages.append('Cxx')
+    for language in languages:
+      self.pushLanguage(language)
+      for testFlag in ['-Qwd10161']:  #Warning for Intel icl,  there appear to be no way to remove warnings with Microsoft cl
         if self.checkLinkerFlag(testFlag):
           # expand to CC_LINKER_FLAGS or CXX_LINKER_FLAGS or FC_LINKER_FLAGS
           linker_flag_var = langMap[language]+'_LINKER_FLAGS'
@@ -1460,10 +1504,10 @@ if (dlclose(handle)) {
   return -1;
 }
 ''' % oldLib
-          if self.checkLink(includes = '#include<dlfcn.h>', body = code):
-            os.remove(oldLib)
+          if self.checkLink(includes = '#include <dlfcn.h>\n#include <stdio.h>', body = code):
             self.dynamicLibraries = 1
             self.logPrint('Using dynamic linker '+self.dynamicLinker+' with flags '+str(self.dynamicLibraryFlags)+' and library extension '+self.dynamicLibraryExt)
+            os.remove(oldLib)
             break
         if os.path.isfile(self.linkerObj): os.remove(self.linkerObj)
         del self.dynamicLinker
@@ -1638,6 +1682,8 @@ if (dlclose(handle)) {
     self.executeTest(self.checkSharedLinker)
     if Configure.isDarwin(self.log):
       self.executeTest(self.checkLinkerMac)
+    if Configure.isCygwin(self.log):
+      self.executeTest(self.checkLinkerWindows)
     self.executeTest(self.checkPIC)
     self.executeTest(self.checkSharedLinkerPaths)
     self.executeTest(self.checkLibC)

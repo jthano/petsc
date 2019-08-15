@@ -121,22 +121,24 @@ class Configure(config.base.Configure):
         self.registerPythonFile(fname,'')
 
     # test for a variety of basic headers and functions
-    headersC = map(lambda name: name+'.h', ['setjmp','dos', 'endian', 'fcntl', 'float', 'io', 'limits', 'malloc', 'pwd', 'search', 'strings',
+    headersC = map(lambda name: name+'.h', ['setjmp','dos', 'fcntl', 'float', 'io',  'malloc', 'pwd',  'strings',
                                             'unistd', 'sys/sysinfo', 'machine/endian', 'sys/param', 'sys/procfs', 'sys/resource',
-                                            'sys/systeminfo', 'sys/times', 'sys/utsname','string', 'stdlib',
+                                            'sys/systeminfo', 'sys/times', 'sys/utsname',
                                             'sys/socket','sys/wait','netinet/in','netdb','Direct','time','Ws2tcpip','sys/types',
-                                            'WindowsX', 'cxxabi','float','ieeefp','stdint','sched','pthread','inttypes','immintrin','zmmintrin'])
+                                            'WindowsX', 'float','ieeefp','stdint','pthread','inttypes','immintrin','zmmintrin'])
     functions = ['access', '_access', 'clock', 'drand48', 'getcwd', '_getcwd', 'getdomainname', 'gethostname',
-                 'gettimeofday', 'getwd', 'memalign', 'mkstemp', 'popen', 'PXFGETARG', 'rand', 'getpagesize',
-                 'readlink', 'realpath',  'sigaction', 'signal', 'sigset', 'usleep', 'sleep', '_sleep', 'socket',
-                 'times', 'gethostbyname', 'uname','snprintf','_snprintf','lseek','_lseek','time','fork','stricmp',
-                 'strcasecmp', 'bzero', 'dlopen', 'dlsym', 'dlclose', 'dlerror','get_nprocs','sysctlbyname',
-                 '_set_output_format','_mkdir']
-    libraries1 = [(['socket', 'nsl'], 'socket'), (['fpe'], 'handle_sigfpes')]
+                 'getwd', 'memalign', 'popen', 'PXFGETARG', 'rand', 'getpagesize',
+                 'readlink', 'realpath',  'usleep', 'sleep', '_sleep',
+                 'uname','snprintf','_snprintf','lseek','_lseek','time','fork','stricmp',
+                 'strcasecmp', 'bzero', 'dlopen', 'dlsym', 'dlclose', 'dlerror',
+                 '_set_output_format','_mkdir','socket','gethostbyname']
+    libraries = [(['fpe'], 'handle_sigfpes')]
+    librariessock = [(['socket', 'nsl'], 'socket')]
     self.headers.headers.extend(headersC)
     self.functions.functions.extend(functions)
-    self.libraries.libraries.extend(libraries1)
-
+    self.libraries.libraries.extend(libraries)
+    if not hasattr(self,'socket'):
+      self.libraries.libraries.extend(librariessock)
     return
 
   def DumpPkgconfig(self):
@@ -368,7 +370,7 @@ prepend-path PATH "%s"
     includes = []
     self.packagelibs = []
     for i in self.framework.packages:
-      if i.useddirectly:
+      if i.useddirectly and not i.required:
         self.addDefine('HAVE_'+i.PACKAGE.replace('-','_'), 1)  # ONLY list package if it is used directly by PETSc (and not only by another package)
       if not isinstance(i.lib, list):
         i.lib = [i.lib]
@@ -754,7 +756,6 @@ char assert_aligned[(sizeof(struct mystruct)==16)*2-1];
 
     if self.compilers.CC.find('win32fe') >= 0:
       self.addDefine('HAVE_WINDOWS_COMPILERS',1)
-      self.addDefine('PATH_SEPARATOR','\';\'')
       self.addDefine('DIR_SEPARATOR','\'\\\\\'')
       self.addDefine('REPLACE_DIR_SEPARATOR','\'/\'')
       self.addDefine('CANNOT_START_DEBUGGER',1)
@@ -763,7 +764,6 @@ char assert_aligned[(sizeof(struct mystruct)==16)*2-1];
       (petscdir,error,status) = self.executeShellCommand('cygpath -m '+self.installdir.petscDir, log = self.log)
       self.addMakeMacro('wPETSC_DIR',petscdir)
     else:
-      self.addDefine('PATH_SEPARATOR','\':\'')
       self.addDefine('REPLACE_DIR_SEPARATOR','\'\\\\\'')
       self.addDefine('DIR_SEPARATOR','\'/\'')
       self.addDefine('DIR','"'+self.installdir.petscDir+'"')
@@ -813,6 +813,8 @@ char assert_aligned[(sizeof(struct mystruct)==16)*2-1];
     args = dict([(nargs.Arg.parseArgument(arg)[0], arg) for arg in self.framework.clArgs])
     if 'with-clean' in args:
       del args['with-clean']
+    if 'force' in args:
+      del args['force']
     if 'configModules' in args:
       if nargs.Arg.parseArgument(args['configModules'])[1] == 'PETSc.Configure':
         del args['configModules']
@@ -879,6 +881,17 @@ char assert_aligned[(sizeof(struct mystruct)==16)*2-1];
     return
 
   def configure(self):
+    if 'package-prefix-hash' in self.argDB:
+      # turn off prefix if it was only used to for installing external packages.
+      self.framework.argDB['prefix'] = ''
+      self.dir = os.path.abspath(os.path.join(self.petscdir.dir, self.arch.arch))
+      self.installdir.dir = self.dir
+      self.installdir.petscDir = self.petscdir.dir
+      self.petscDir = self.petscdir.dir
+      self.petscArch = self.arch.arch
+      self.addMakeMacro('PREFIXDIR',self.dir)
+      self.confDir = os.path.abspath(os.path.join(self.petscdir.dir, self.arch.arch))
+
     if not os.path.samefile(self.petscdir.dir, os.getcwd()):
       raise RuntimeError('Wrong PETSC_DIR option specified: '+str(self.petscdir.dir) + '\n  Configure invoked in: '+os.path.realpath(os.getcwd()))
     if self.framework.argDB['prefix'] and os.path.isdir(self.framework.argDB['prefix']) and os.path.samefile(self.framework.argDB['prefix'],self.petscdir.dir):

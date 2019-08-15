@@ -67,6 +67,7 @@ class Package(config.base.Configure):
     self.license                = None # optional license text
     self.excludedDirs           = []   # list of directory names that could be false positives, SuperLU_DIST when looking for SuperLU
     self.downloadonWindows      = 0  # 1 means the --download-package works on Microsoft Windows
+    self.requirescxx14          = 0
     self.requirescxx11          = 0
     self.publicInstall          = 1  # Installs the package in the --prefix directory if it was given. Packages that are only used
                                      # during the configuration/installation process such as sowing, make etc should be marked as 0
@@ -90,7 +91,7 @@ class Package(config.base.Configure):
     self.hastestsdatafiles      = 0 # indicates that PETSc make all tests has tests for this package that require DATAFILESPATH to be set
     self.makerulename           = '' # some packages do too many things with the make stage; this allows a package to limit to, for example, just building the libraries
     self.installedpetsc         = 0
-    self.installwithbatch       = 0  # install the package even though configure is running in the initial batch mode; f2blaslapack and fblaslapack for example
+    self.installwithbatch       = 1  # install the package even though configure in the batch mode; f2blaslapack and fblaslapack for example
     self.builtafterpetsc        = 0  # package is compiled/installed after PETSc is compiled
 
     self.downloaded             = 0  # 1 indicates that this package is being downloaded during this run (internal use only)
@@ -103,12 +104,15 @@ class Package(config.base.Configure):
     if self.found:
       output = self.name+':\n'
       if self.foundversion:
-        output += '  Version:  '+self.foundversion+'\n'
+        if hasattr(self,'versiontitle'):
+          output += '  '+self.versiontitle+':  '+self.foundversion+'\n'
+        else:
+          output += '  Version:  '+self.foundversion+'\n'
       else:
         if self.version: output += '  Version:  '+self.version+'\n'
       if self.include: output += '  Includes: '+self.headers.toStringNoDupes(self.include)+'\n'
       if self.lib:     output += '  Library:  '+self.libraries.toStringNoDupes(self.lib)+'\n'
-      if self.executablename: output += ' '+getattr(self,self.executablename)+'\n'
+      if self.executablename: output += '  '+getattr(self,self.executablename)+'\n'
       if self.usesopenmp == 'yes': output += '  uses OpenMP; use export OMP_NUM_THREADS=<p> or -omp_num_threads <p> to control the number of threads\n'
       if self.usesopenmp == 'unknown': output += '  Unkown if this uses OpenMP (try export OMP_NUM_THREADS=<1-4> yourprogram -log_view) \n'
     return output
@@ -320,7 +324,7 @@ class Package(config.base.Configure):
     if not self.packageDir: self.packageDir = self.downLoad()
     self.updateGitDir()
     self.updatehgDir()
-    if self.publicInstall:
+    if self.publicInstall or 'package-prefix-hash' in self.argDB:
       self.installDir = self.defaultInstallDir
       self.installSudo= self.installDirProvider.installSudo
     else:
@@ -401,7 +405,7 @@ class Package(config.base.Configure):
 
       l,err,ret  = config.base.Configure.executeShellCommand('pkg-config '+self.pkgname+' --libs', timeout=5, log = self.log)
       l = l.strip()
-      i,err,ret  = config.base.Configure.executeShellCommand('pkg-config '+self.pkgname+' --variable=includedir', timeout=5, log = self.log)
+      i,err,ret  = config.base.Configure.executeShellCommand('pkg-config '+self.pkgname+' --cflags', timeout=5, log = self.log)
       i = i.strip()
       if self.argDB['with-'+self.package+'-pkg-config']:
         if path: os.environ['PKG_CONFIG_PATH'] = path
@@ -498,8 +502,13 @@ class Package(config.base.Configure):
     '''Check if we should download the package, returning the install directory or the empty string indicating installation'''
     if not self.download:
       return ''
-    if self.framework.batchBodies and not self.installwithbatch:
-      return
+    if self.argDB['with-batch'] and self.argDB['download-'+self.package] and not self.installwithbatch: raise RuntimeError('--download-'+self.name+' cannot be used on batch systems. You must either\n\
+    1) load the appropriate module on your system and use --with-'+self.name+' or \n\
+    2) locate its installation on your machine or install it yourself and use --with-'+self.name+'-dir=path\n')
+
+    if 'package-prefix-hash' in self.argDB and self.argDB['package-prefix-hash'] == 'reuse': # package already built in prefix hash location so reuse it
+      self.installDir = self.defaultInstallDir
+      return self.defaultInstallDir
     if self.argDB['download-'+self.package]:
       if self.license and not os.path.isfile('.'+self.package+'_license'):
         self.logClear()
@@ -862,7 +871,8 @@ If its a remote branch, use: origin/'+self.gitcommit+' for gitcommit.')
       if (self.cxx and not hasattr(self.compilers, 'CXX')) or \
          (self.fc and not hasattr(self.compilers, 'FC')) or \
          (self.noMPIUni and self.mpi.usingMPIUni) or \
-         (self.requirescxx11 and self.compilers.cxxdialect != 'C++11') or \
+         (self.requirescxx14 and self.compilers.cxxdialect not in ['C++14']) or \
+         (self.requirescxx11 and self.compilers.cxxdialect not in ['C++11','C++14']) or \
          (not self.defaultPrecision.lower() in self.precisions) or \
          (not self.complex and self.defaultScalarType.lower() == 'complex') or \
          (self.defaultIndexSize == 64 and self.requires32bitint) or \
@@ -878,7 +888,9 @@ If its a remote branch, use: origin/'+self.gitcommit+' for gitcommit.')
         raise RuntimeError('Cannot use '+self.name+' without Fortran, make sure you do NOT have --with-fc=0')
       if self.noMPIUni and self.mpi.usingMPIUni:
         raise RuntimeError('Cannot use '+self.name+' with MPIUNI, you need a real MPI')
-      if self.requirescxx11 and self.compilers.cxxdialect != 'C++11':
+      if self.requirescxx14 and self.compilers.cxxdialect not in ['C++14']:
+        raise RuntimeError('Cannot use '+self.name+' without enabling C++14, see --with-cxx-dialect=C++14')
+      if self.requirescxx11 and self.compilers.cxxdialect not in ['C++11','C++14']:
         raise RuntimeError('Cannot use '+self.name+' without enabling C++11, see --with-cxx-dialect=C++11')
       if self.download and self.argDB.get('download-'+self.downloadname.lower()) and not self.downloadonWindows and (self.setCompilers.CC.find('win32fe') >= 0):
         raise RuntimeError('External package '+self.name+' does not support --download-'+self.downloadname.lower()+' with Microsoft compilers')
@@ -917,9 +929,9 @@ If its a remote branch, use: origin/'+self.gitcommit+' for gitcommit.')
       if str.find('.') == str.rfind('.'): return str
       return str[0:str.rfind('.')]+'.100000'
 
-    if not self.version and not self.minversion and not self.maxversion: return
-    if not self.versionname: return
+    if not self.version and not self.minversion and not self.maxversion and not self.versionname: return
     if not self.versioninclude:
+      if not self.includes: return
       self.versioninclude = self.includes[0]
     oldFlags = self.compilers.CPPFLAGS
     self.compilers.CPPFLAGS += ' '+self.headers.toString(self.include)
@@ -955,24 +967,24 @@ If its a remote branch, use: origin/'+self.gitcommit+' for gitcommit.')
     self.log.write('For '+self.package+' need '+self.minversion+' <= '+self.foundversion+' <= '+self.maxversion+'\n')
 
     try:
-      foundversiontuble = self.versionToTuple(self.foundversion)
+      foundversiontuple = self.versionToTuple(self.foundversion)
     except:
-      self.log.write('For '+self.package+' unable to convert version string to tuble, skipping version check\n')
+      self.log.write('For '+self.package+' unable to convert version string to tuple, skipping version check\n')
       return
 
     suggest = ''
     if self.download: suggest = '\nSuggest using --download-'+self.package+' for a compatible '+self.name
     if self.minversion:
-      if self.versionToTuple(self.minversion) > foundversiontuble:
+      if self.versionToTuple(self.minversion) > foundversiontuple:
         raise RuntimeError(self.package+' version is '+self.foundversion+' this version of PETSc needs at least '+self.minversion+suggest+'\n')
     elif self.version:
-      if self.versionToTuple(zeroPatch(self.version)) > foundversiontuble:
+      if self.versionToTuple(zeroPatch(self.version)) > foundversiontuple:
         self.logPrintBox('Warning: Using version '+self.foundversion+' of package '+self.package+' PETSc is tested with '+dropPatch(self.version)+suggest)
     if self.maxversion:
-      if self.versionToTuple(self.maxversion) < foundversiontuble:
+      if self.versionToTuple(self.maxversion) < foundversiontuple:
         raise RuntimeError(self.package+' version is '+self.foundversion+' this version of PETSc needs at most '+self.maxversion+suggest+'\n')
     elif self.version:
-      if self.versionToTuple(infinitePatch(self.version)) < foundversiontuble:
+      if self.versionToTuple(infinitePatch(self.version)) < foundversiontuple:
         self.logPrintBox('Warning: Using version '+self.foundversion+' of package '+self.package+' PETSc is tested with '+dropPatch(self.version)+suggest)
     return
 
@@ -1364,6 +1376,7 @@ Brief overview of how BuildSystem\'s configuration of packages works.
 class GNUPackage(Package):
   def __init__(self, framework):
     Package.__init__(self,framework)
+    self.builddir = 'no' # requires build be done in a subdirectory, not in the directory tree
     return
 
   def setupHelp(self, help):
@@ -1433,23 +1446,8 @@ class GNUPackage(Package):
     return args
 
   def Install(self):
-    # hypre had configure inside src directory ugh
-    if not os.path.isfile(os.path.join(self.packageDir,'configure')) and not os.path.isfile(os.path.join(self.packageDir,'src','configure')):
-      if not self.programs.autoreconf:
-        raise RuntimeError('autoreconf required for ' + self.PACKAGE+' not found (or broken)!')
-      if not self.programs.libtoolize:
-        raise RuntimeError('libtoolize required for ' + self.PACKAGE+' not found!')
-      try:
-        self.logPrintBox('Running autoreconf on ' +self.PACKAGE+'; this may take several minutes')
-        output,err,ret  = config.base.Configure.executeShellCommand(self.programs.libtoolize, cwd=self.packageDir, timeout=100, log=self.log)
-        if ret:
-          raise RuntimeError('Error in libtoolize: ' + str(e))
-        output,err,ret  = config.base.Configure.executeShellCommand([self.programs.autoreconf, '--force', '--install'], cwd=self.packageDir, timeout=200, log = self.log)
-      except RuntimeError as e:
-        raise RuntimeError('Error running autoreconf on ' + self.PACKAGE+': '+str(e))
-
     ##### getInstallDir calls this, and it sets up self.packageDir (source download), self.confDir and self.installDir
-    args = self.formGNUConfigureArgs()
+    args = self.formGNUConfigureArgs()  # allow package to change self.packageDir
     if self.download and self.argDB['download-'+self.downloadname.lower()+'-configure-arguments']:
        args.append(self.argDB['download-'+self.downloadname.lower()+'-configure-arguments'])
     args = ' '.join(args)
@@ -1460,10 +1458,39 @@ class GNUPackage(Package):
     ### Use conffile to check whether a reconfigure/rebuild is required
     if not self.installNeeded(conffile):
       return self.installDir
+
+    if not os.path.isfile(os.path.join(self.packageDir,'configure')):
+      if not self.programs.autoreconf:
+        raise RuntimeError('autoreconf required for ' + self.PACKAGE+' not found (or broken)! Use your package manager to install autoconf')
+      if not self.programs.libtoolize:
+        raise RuntimeError('libtoolize required for ' + self.PACKAGE+' not found! Use your package manager to install libtool')
+      try:
+        self.logPrintBox('Running libtoolize on ' +self.PACKAGE+'; this may take several minutes')
+        output,err,ret  = config.base.Configure.executeShellCommand(self.programs.libtoolize, cwd=self.packageDir, timeout=100, log=self.log)
+        if ret:
+          raise RuntimeError('Error in libtoolize: ' + str(e))
+        self.logPrintBox('Running autoreconf on ' +self.PACKAGE+'; this may take several minutes')
+        output,err,ret  = config.base.Configure.executeShellCommand([self.programs.autoreconf, '--force', '--install'], cwd=self.packageDir, timeout=200, log = self.log)
+        if ret:
+          raise RuntimeError('Error in autoreconf: ' + str(e))
+      except RuntimeError as e:
+        raise RuntimeError('Error running libtoolize or autoreconf on ' + self.PACKAGE+': '+str(e))
+
+    if self.builddir == 'yes':
+      folder = os.path.join(self.packageDir, 'petsc-build')
+      if os.path.isdir(folder):
+        import shutil
+        shutil.rmtree(folder)
+      os.mkdir(folder)
+      self.packageDir = folder
+      dot = '..'
+    else:
+      dot = '.'
+
     ### Configure and Build package
     try:
       self.logPrintBox('Running configure on ' +self.PACKAGE+'; this may take several minutes')
-      output1,err1,ret1  = config.base.Configure.executeShellCommand('./configure '+args, cwd=self.packageDir, timeout=2000, log = self.log)
+      output1,err1,ret1  = config.base.Configure.executeShellCommand(dot+'/configure '+args, cwd=self.packageDir, timeout=2000, log = self.log)
     except RuntimeError as e:
       raise RuntimeError('Error running configure on ' + self.PACKAGE+': '+str(e))
     try:

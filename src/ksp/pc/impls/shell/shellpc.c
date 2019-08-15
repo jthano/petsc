@@ -423,7 +423,7 @@ static PetscErrorCode  PCShellGetName_Shell(PC pc,const char *name[])
 
    Input Parameters:
 +  pc - the preconditioner context
-.  destroy - the application-provided destroy routine
+-  destroy - the application-provided destroy routine
 
    Calling sequence of destroy:
 .vb
@@ -458,7 +458,7 @@ PetscErrorCode  PCShellSetDestroy(PC pc,PetscErrorCode (*destroy)(PC))
 
    Input Parameters:
 +  pc - the preconditioner context
-.  setup - the application-provided setup routine
+-  setup - the application-provided setup routine
 
    Calling sequence of setup:
 .vb
@@ -494,7 +494,7 @@ PetscErrorCode  PCShellSetSetUp(PC pc,PetscErrorCode (*setup)(PC))
 +  pc - the preconditioner context
 -  view - the application-provided view routine
 
-   Calling sequence of apply:
+   Calling sequence of view:
 .vb
    PetscErrorCode view(PC pc,PetscViewer v)
 .ve
@@ -633,7 +633,7 @@ PetscErrorCode  PCShellSetApplySymmetricRight(PC pc,PetscErrorCode (*apply)(PC,V
 +  pc - the preconditioner context
 -  applyBA - the application-provided BA routine
 
-   Calling sequence of apply:
+   Calling sequence of applyBA:
 .vb
    PetscErrorCode applyBA (PC pc,Vec xin,Vec xout)
 .ve

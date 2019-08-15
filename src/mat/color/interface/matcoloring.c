@@ -175,7 +175,7 @@ PetscErrorCode MatColoringSetType(MatColoring mc,MatColoringType type)
 +   -mat_coloring_type - the type of coloring algorithm used
 .   -mat_coloring_maxcolors - the maximum number of relevant colors, all nodes not in a color are in maxcolors+1
 .   -mat_coloring_distance - compute a distance 1,2,... coloring.
-.   -mat_coloring_view - print information about the coloring and the produced index sets
+-   -mat_coloring_view - print information about the coloring and the produced index sets
 
    Level: beginner
 
@@ -224,9 +224,9 @@ PetscErrorCode MatColoringSetFromOptions(MatColoring mc)
 
    Logically Collective on MatColoring
 
-   Input Parameter:
-.  mc - the MatColoring context
-.  dist - the distance the coloring should compute
+   Input Parameters:
++  mc - the MatColoring context
+-  dist - the distance the coloring should compute
 
    Level: beginner
 
@@ -366,7 +366,7 @@ PetscErrorCode MatColoringApply(MatColoring mc,ISColoring *coloring)
     ierr = PetscViewerPushFormat(viewer,format);CHKERRQ(ierr);
     ierr = MatColoringView(mc,viewer);CHKERRQ(ierr);
     ierr = MatGetSize(mc->mat,NULL,&nc);CHKERRQ(ierr);
-    ierr = ISColoringGetIS(*coloring,&ncolors,NULL);CHKERRQ(ierr);
+    ierr = ISColoringGetIS(*coloring,PETSC_USE_POINTER,&ncolors,NULL);CHKERRQ(ierr);
     ierr = PetscViewerASCIIPrintf(viewer,"  Number of colors %d\n",ncolors);CHKERRQ(ierr);
     ierr = PetscViewerASCIIPrintf(viewer,"  Number of total columns %d\n",nc);CHKERRQ(ierr);
     if (nc <= 1000) {ierr = ISColoringView(*coloring,viewer);CHKERRQ(ierr);}

@@ -1,6 +1,7 @@
 
 ALL: lib
 
+DIRS     = cuda
 CFLAGS   =
 FFLAGS   =
 SOURCEC  = dense.c densehdf5.c

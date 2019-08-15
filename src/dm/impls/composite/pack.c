@@ -584,7 +584,7 @@ PetscErrorCode  DMCompositeScatter(DM dm,Vec gvec,...)
     Input Parameters:
 +    dm - the packer object
 .    gvec - the global vector
-.    lvecs - array of local vectors, NULL for any that are not needed
+-    lvecs - array of local vectors, NULL for any that are not needed
 
     Level: advanced
 
@@ -1791,7 +1791,6 @@ PETSC_EXTERN PetscErrorCode DMCreate_Composite(DM p)
   PetscFunctionBegin;
   ierr          = PetscNewLog(p,&com);CHKERRQ(ierr);
   p->data       = com;
-  ierr          = PetscObjectChangeTypeName((PetscObject)p,"DMComposite");CHKERRQ(ierr);
   com->n        = 0;
   com->nghost   = 0;
   com->next     = NULL;

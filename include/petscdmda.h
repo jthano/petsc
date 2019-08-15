@@ -1,5 +1,5 @@
-#if !defined(__PETSCDMDA_H)
-#define __PETSCDMDA_H
+#if !defined(PETSCDMDA_H)
+#define PETSCDMDA_H
 
 #include <petscdm.h>
 #include <petscdmdatypes.h>
@@ -30,6 +30,7 @@ M*/
 
 PETSC_EXTERN PetscErrorCode DMDASetInterpolationType(DM,DMDAInterpolationType);
 PETSC_EXTERN PetscErrorCode DMDAGetInterpolationType(DM,DMDAInterpolationType*);
+PETSC_EXTERN PetscErrorCode DMDACreateAggregates(DM,DM,Mat*);
 
 /* FEM */
 PETSC_EXTERN PetscErrorCode DMDASetElementType(DM,DMDAElementType);
@@ -115,6 +116,8 @@ PETSC_EXTERN PetscErrorCode DMDAGetStencilType(DM, DMDAStencilType*);
 
 PETSC_EXTERN PetscErrorCode DMDAVecGetArray(DM,Vec,void *);
 PETSC_EXTERN PetscErrorCode DMDAVecRestoreArray(DM,Vec,void *);
+PETSC_EXTERN PetscErrorCode DMDAVecGetArrayWrite(DM,Vec,void *);
+PETSC_EXTERN PetscErrorCode DMDAVecRestoreArrayWrite(DM,Vec,void *);
 
 PETSC_EXTERN PetscErrorCode DMDAVecGetArrayDOF(DM,Vec,void *);
 PETSC_EXTERN PetscErrorCode DMDAVecRestoreArrayDOF(DM,Vec,void *);

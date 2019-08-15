@@ -220,7 +220,7 @@ PetscErrorCode FormInitialGuess(AppCtx *user,DM da,Vec X)
        - You MUST call VecRestoreArray() when you no longer need access to
          the array.
   */
-  ierr = DMDAVecGetArray(da,X,&x);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayWrite(da,X,&x);CHKERRQ(ierr);
 
   /*
      Compute initial guess over the locally owned part of the grid
@@ -238,7 +238,7 @@ PetscErrorCode FormInitialGuess(AppCtx *user,DM da,Vec X)
   /*
      Restore vector
   */
-  ierr = DMDAVecRestoreArray(da,X,&x);CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArrayWrite(da,X,&x);CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
 
@@ -421,7 +421,7 @@ PetscErrorCode NonlinearGS(SNES snes, Vec X, Vec B, void *ctx)
     ierr = DMGlobalToLocalEnd(da,B,INSERT_VALUES,localB);CHKERRQ(ierr);
   }
   ierr = DMDAGetLocalInfo(da,&info);CHKERRQ(ierr);
-  ierr = DMDAVecGetArray(da,localX,&x);CHKERRQ(ierr);
+  ierr = DMDAVecGetArrayWrite(da,localX,&x);CHKERRQ(ierr);
   if (B) {
     ierr = DMDAVecGetArrayRead(da,localB,&b);CHKERRQ(ierr);
   }
@@ -634,7 +634,7 @@ PetscErrorCode NonlinearGS(SNES snes, Vec X, Vec B, void *ctx)
       }
     }
   }
-  ierr = DMDAVecRestoreArray(da,localX,&x);CHKERRQ(ierr);
+  ierr = DMDAVecRestoreArrayWrite(da,localX,&x);CHKERRQ(ierr);
   if (B) {
     ierr = DMDAVecRestoreArrayRead(da,localB,&b);CHKERRQ(ierr);
   }
@@ -1106,5 +1106,16 @@ PetscErrorCode NonlinearGS(SNES snes, Vec X, Vec B, void *ctx)
       requires: cuda
       args: -snes_monitor -dm_mat_type mpiaijcusparse -dm_vec_type mpicuda -pc_type gamg -ksp_monitor  -mg_levels_ksp_max_it 3
 
+   test:
+      suffix: seqbaijmkl
+      nsize: 1
+      requires: define(PETSC_HAVE_MKL_SPARSE_OPTIMIZE)
+      args: -dm_mat_type baij -snes_monitor -ksp_monitor -snes_view
+
+   test:
+      suffix: mpibaijmkl
+      nsize: 2
+      requires:  define(PETSC_HAVE_MKL_SPARSE_OPTIMIZE)
+      args: -dm_mat_type baij -snes_monitor -ksp_monitor -snes_view
 
 TEST*/

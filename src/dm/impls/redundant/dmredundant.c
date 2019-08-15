@@ -313,7 +313,7 @@ PetscErrorCode DMRedundantSetSize(DM dm,PetscMPIInt rank,PetscInt N)
     Not Collective
 
     Input Parameter:
-+   dm - redundant DM
+.   dm - redundant DM
 
     Output Parameters:
 +   rank - rank of process to own redundant degrees of freedom (or NULL)
@@ -386,8 +386,6 @@ PETSC_EXTERN PetscErrorCode DMCreate_Redundant(DM dm)
   PetscFunctionBegin;
   ierr     = PetscNewLog(dm,&red);CHKERRQ(ierr);
   dm->data = red;
-
-  ierr = PetscObjectChangeTypeName((PetscObject)dm,DMREDUNDANT);CHKERRQ(ierr);
 
   dm->ops->setup               = DMSetUp_Redundant;
   dm->ops->view                = DMView_Redundant;

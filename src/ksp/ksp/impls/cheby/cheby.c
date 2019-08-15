@@ -172,7 +172,7 @@ PetscErrorCode KSPChebyshevEstEigSet(KSP ksp,PetscReal a,PetscReal b,PetscReal c
 -  use - PETSC_TRUE to use noisy
 
    Options Database:
-+  -ksp_chebyshev_esteig_noisy <true,false>
+.  -ksp_chebyshev_esteig_noisy <true,false>
 
   Notes:
     This alledgely works better for multigrid smoothers
@@ -345,12 +345,12 @@ static PetscErrorCode KSPSolve_Chebyshev(KSP ksp)
           PetscScalar    *xx;
           ierr = VecGetOwnershipRange(B,&istart,NULL);CHKERRQ(ierr);
           ierr = VecGetLocalSize(B,&n);CHKERRQ(ierr);
-          ierr = VecGetArray(B,&xx);CHKERRQ(ierr);
+          ierr = VecGetArrayWrite(B,&xx);CHKERRQ(ierr);
           for (i=0; i<n; i++) {
             PetscScalar v = chebyhash(i+istart);
             xx[i] = v;
           }
-          ierr = VecRestoreArray(B,&xx);CHKERRQ(ierr);
+          ierr = VecRestoreArrayWrite(B,&xx);CHKERRQ(ierr);
         }
       } else {
         PC        pc;

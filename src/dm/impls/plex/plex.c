@@ -671,6 +671,7 @@ static PetscErrorCode DMPlexView_Ascii(DM dm, PetscViewer viewer)
     const char  *name, *color;
     const char  *defcolors[3]  = {"gray", "orange", "green"};
     const char  *deflcolors[4] = {"blue", "cyan", "red", "magenta"};
+    char         lname[PETSC_MAX_PATH_LEN];
     PetscReal    scale         = 2.0;
     PetscReal    tikzscale     = 1.0;
     PetscBool    useNumbers    = PETSC_TRUE, useLabels, useColors;
@@ -679,7 +680,9 @@ static PetscErrorCode DMPlexView_Ascii(DM dm, PetscViewer viewer)
     PetscInt     numLabels, l, numColors, numLColors, dim, depth, cStart, cEnd, c, vStart, vEnd, v, eStart = 0, eEnd = 0, e, p;
     PetscMPIInt  rank, size;
     char         **names, **colors, **lcolors;
-    PetscBool    plotEdges, flg;
+    PetscBool    plotEdges, flg, lflg;
+    PetscBT      wp = NULL;
+    PetscInt     pEnd, pStart;
 
     ierr = DMGetDimension(dm, &dim);CHKERRQ(ierr);
     ierr = DMPlexGetDepth(dm, &depth);CHKERRQ(ierr);
@@ -703,10 +706,39 @@ static PetscErrorCode DMPlexView_Ascii(DM dm, PetscViewer viewer)
       numLColors = 4;
       for (c = 0; c < numLColors; ++c) {ierr = PetscStrallocpy(deflcolors[c], &lcolors[c]);CHKERRQ(ierr);}
     }
+    ierr = PetscOptionsGetString(((PetscObject) viewer)->options, ((PetscObject) viewer)->prefix, "-dm_plex_view_label_filter", lname, PETSC_MAX_PATH_LEN, &lflg);CHKERRQ(ierr);
     plotEdges = (PetscBool)(depth > 1 && useNumbers && dim < 3);
     ierr = PetscOptionsGetBool(((PetscObject) viewer)->options,((PetscObject) viewer)->prefix, "-dm_plex_view_edges", &plotEdges, &flg);CHKERRQ(ierr);
     if (flg && plotEdges && depth < dim) SETERRQ(PetscObjectComm((PetscObject) dm), PETSC_ERR_SUP, "Mesh must be interpolated");
     if (depth < dim) plotEdges = PETSC_FALSE;
+
+    /* filter points with labelvalue != labeldefaultvalue */
+    ierr = DMPlexGetChart(dm, &pStart, &pEnd);CHKERRQ(ierr);
+    if (lflg) {
+      DMLabel lbl;
+
+      ierr = DMGetLabel(dm, lname, &lbl);CHKERRQ(ierr);
+      if (lbl) {
+        PetscInt val, defval;
+
+        ierr = DMLabelGetDefaultValue(lbl, &defval);CHKERRQ(ierr);
+        ierr = PetscBTCreate(pEnd-pStart, &wp);CHKERRQ(ierr);
+        for (c = pStart;  c < pEnd; c++) {
+          PetscInt *closure = NULL;
+          PetscInt  closureSize;
+
+          ierr = DMLabelGetValue(lbl, c, &val);CHKERRQ(ierr);
+          if (val == defval) continue;
+
+          ierr = DMPlexGetTransitiveClosure(dm, c, PETSC_TRUE, &closureSize, &closure);CHKERRQ(ierr);
+          for (p = 0; p < closureSize*2; p += 2) {
+            ierr = PetscBTSet(wp, closure[p] - pStart);CHKERRQ(ierr);
+          }
+          ierr = DMPlexRestoreTransitiveClosure(dm, c, PETSC_TRUE, &closureSize, &closure);CHKERRQ(ierr);
+        }
+      }
+    }
+
     ierr = MPI_Comm_rank(PetscObjectComm((PetscObject)dm), &rank);CHKERRQ(ierr);
     ierr = MPI_Comm_size(PetscObjectComm((PetscObject)dm), &size);CHKERRQ(ierr);
     ierr = PetscObjectGetName((PetscObject) dm, &name);CHKERRQ(ierr);
@@ -729,6 +761,7 @@ static PetscErrorCode DMPlexView_Ascii(DM dm, PetscViewer viewer)
       ierr = PetscViewerASCIIPrintf(viewer, ".\n\n\n");CHKERRQ(ierr);
     }
     ierr = PetscViewerASCIIPrintf(viewer, "\\begin{tikzpicture}[scale = %g,font=\\fontsize{8}{8}\\selectfont]\n", tikzscale);CHKERRQ(ierr);
+
     /* Plot vertices */
     ierr = DMPlexGetDepthStratum(dm, 0, &vStart, &vEnd);CHKERRQ(ierr);
     ierr = VecGetArray(coordinates, &coords);CHKERRQ(ierr);
@@ -737,6 +770,7 @@ static PetscErrorCode DMPlexView_Ascii(DM dm, PetscViewer viewer)
       PetscInt  off, dof, d;
       PetscBool isLabeled = PETSC_FALSE;
 
+      if (wp && !PetscBTLookup(wp,v - pStart)) continue;
       ierr = PetscSectionGetDof(coordSection, v, &dof);CHKERRQ(ierr);
       ierr = PetscSectionGetOffset(coordSection, v, &off);CHKERRQ(ierr);
       ierr = PetscViewerASCIISynchronizedPrintf(viewer, "\\path (");CHKERRQ(ierr);
@@ -772,6 +806,7 @@ static PetscErrorCode DMPlexView_Ascii(DM dm, PetscViewer viewer)
       for (e = eStart; e < eEnd; ++e) {
         const PetscInt *cone;
 
+        if (wp && !PetscBTLookup(wp,e - pStart)) continue;
         color = colors[rank%numColors];
         for (l = 0; l < numLabels; ++l) {
           PetscInt val;
@@ -786,6 +821,7 @@ static PetscErrorCode DMPlexView_Ascii(DM dm, PetscViewer viewer)
         PetscInt *closure = NULL;
         PetscInt  closureSize, firstPoint = -1;
 
+        if (wp && !PetscBTLookup(wp,c - pStart)) continue;
         ierr = DMPlexGetTransitiveClosure(dm, c, PETSC_TRUE, &closureSize, &closure);CHKERRQ(ierr);
         ierr = PetscViewerASCIISynchronizedPrintf(viewer, "\\draw[color=%s] ", colors[rank%numColors]);CHKERRQ(ierr);
         for (p = 0; p < closureSize*2; p += 2) {
@@ -808,6 +844,7 @@ static PetscErrorCode DMPlexView_Ascii(DM dm, PetscViewer viewer)
       PetscInt *closure    = NULL;
       PetscInt  closureSize, dof, d, n = 0;
 
+      if (wp && !PetscBTLookup(wp,c - pStart)) continue;
       ierr = DMPlexGetTransitiveClosure(dm, c, PETSC_TRUE, &closureSize, &closure);CHKERRQ(ierr);
       ierr = PetscViewerASCIISynchronizedPrintf(viewer, "\\path (");CHKERRQ(ierr);
       for (p = 0; p < closureSize*2; p += 2) {
@@ -853,6 +890,7 @@ static PetscErrorCode DMPlexView_Ascii(DM dm, PetscViewer viewer)
         const PetscInt *cone;
         PetscInt        coneSize, offA, offB, dof, d;
 
+        if (wp && !PetscBTLookup(wp,e - pStart)) continue;
         ierr = DMPlexGetConeSize(dm, e, &coneSize);CHKERRQ(ierr);
         if (coneSize != 2) SETERRQ2(PetscObjectComm((PetscObject)dm), PETSC_ERR_ARG_WRONG, "Edge %D cone should have two vertices, not %D", e, coneSize);
         ierr = DMPlexGetCone(dm, e, &cone);CHKERRQ(ierr);
@@ -890,6 +928,7 @@ static PetscErrorCode DMPlexView_Ascii(DM dm, PetscViewer viewer)
     for (c = 0; c < numColors;  ++c) {ierr = PetscFree(colors[c]);CHKERRQ(ierr);}
     for (c = 0; c < numLColors; ++c) {ierr = PetscFree(lcolors[c]);CHKERRQ(ierr);}
     ierr = PetscFree3(names, colors, lcolors);CHKERRQ(ierr);
+    ierr = PetscBTDestroy(&wp);CHKERRQ(ierr);
   } else if (format == PETSC_VIEWER_LOAD_BALANCE) {
     Vec                    cown,acown;
     VecScatter             sct;
@@ -1621,6 +1660,8 @@ PetscErrorCode DMPlexAddConeSize(DM dm, PetscInt p, PetscInt size)
   Fortran Notes:
   Since it returns an array, this routine is only available in Fortran 90, and you must
   include petsc.h90 in your code.
+  You must also call DMPlexRestoreCone() after you finish using the returned array.
+  DMPlexRestoreCone() is not needed/available in C.
 
 .seealso: DMPlexCreate(), DMPlexSetCone(), DMPlexGetConeTuple(), DMPlexSetChart()
 @*/
@@ -1675,69 +1716,173 @@ PetscErrorCode DMPlexGetConeTuple(DM dm, IS p, PetscSection *pConesSection, IS *
   PetscFunctionReturn(0);
 }
 
-static PetscErrorCode DMPlexGetConeRecursive_Private(DM dm, PetscInt *n_inout, const PetscInt points[], PetscInt *offset_inout, PetscInt buf[])
-{
-  PetscInt p, n, cn, i;
-  const PetscInt *cone;
-  PetscErrorCode ierr;
-
-  PetscFunctionBegin;
-  n = *n_inout;
-  *n_inout = 0;
-  for (i=0; i<n; i++) {
-    p = points[i];
-    ierr = DMPlexGetConeSize(dm, p, &cn);CHKERRQ(ierr);
-    if (!cn) {
-      cn = 1;
-      if (buf) {
-        buf[*offset_inout] = p;
-        ++(*offset_inout);
-      }
-    } else {
-      ierr = DMPlexGetCone(dm, p, &cone);CHKERRQ(ierr);
-      ierr = DMPlexGetConeRecursive_Private(dm, &cn, cone, offset_inout, buf);CHKERRQ(ierr);
-    }
-    *n_inout += cn;
-  }
-  PetscFunctionReturn(0);
-}
-
-/*@C
-  DMPlexGetConeRecursive - Like DMPlexGetConeTuple() but recursive, i.e. each cone point is expanded into a set of its own cone points until a vertex (DAG point with no cone) is reached.
+/*@
+  DMPlexGetConeRecursiveVertices - Expand each given point into its cone points and do that recursively until we end up just with vertices.
 
   Not collective
 
   Input Parameters:
 + dm - The DMPlex
-- p - The IS of points, which must lie in the chart set with DMPlexSetChart()
+- points - The IS of points, which must lie in the chart set with DMPlexSetChart()
 
   Output Parameter:
-. pCones - An array of recursively expanded cones, i.e. containing only vertices, and each of them can be present multiple times
+. expandedPoints - An array of vertices recursively expanded from input points
 
   Level: advanced
 
-.seealso: DMPlexCreate(), DMPlexGetCone(), DMPlexGetConeTuple()
+  Notes:
+  Like DMPlexGetConeRecursive but returns only the 0-depth IS (i.e. vertices only) and no sections.
+  There is no corresponding Restore function, just call ISDestroy() on the returned IS to deallocate.
+
+.seealso: DMPlexCreate(), DMPlexGetCone(), DMPlexGetConeTuple(), DMPlexGetConeRecursive(), DMPlexRestoreConeRecursive(), DMPlexGetDepth()
 @*/
-PetscErrorCode DMPlexGetConeRecursive(DM dm, IS p, IS *pCones)
+PetscErrorCode DMPlexGetConeRecursiveVertices(DM dm, IS points, IS *expandedPoints)
 {
-  const PetscInt      *arr=NULL;
-  PetscInt            *cpoints=NULL;
-  PetscInt            n, cn;
-  PetscInt            zero;
+  IS                  *expandedPointsAll;
+  PetscInt            depth;
   PetscErrorCode      ierr;
 
   PetscFunctionBegin;
-  ierr = ISGetLocalSize(p, &n);CHKERRQ(ierr);
-  ierr = ISGetIndices(p, &arr);CHKERRQ(ierr);
-  zero = 0;
-  /* first figure out the total number of returned points */
-  cn = n;
-  ierr = DMPlexGetConeRecursive_Private(dm, &cn, arr, &zero, NULL);CHKERRQ(ierr);
-  ierr = PetscMalloc1(cn, &cpoints);CHKERRQ(ierr);
-  /* now get recursive cones themselves */
-  ierr = DMPlexGetConeRecursive_Private(dm, &n, arr, &zero, cpoints);CHKERRQ(ierr);
-  ierr = ISCreateGeneral(PetscObjectComm((PetscObject)p), n, cpoints, PETSC_OWN_POINTER, pCones);CHKERRQ(ierr);
-  ierr = ISRestoreIndices(p, &arr);CHKERRQ(ierr);
+  PetscValidHeaderSpecific(dm, DM_CLASSID, 1);
+  PetscValidHeaderSpecific(points, IS_CLASSID, 2);
+  PetscValidPointer(expandedPoints, 3);
+  ierr = DMPlexGetConeRecursive(dm, points, &depth, &expandedPointsAll, NULL);CHKERRQ(ierr);
+  *expandedPoints = expandedPointsAll[0];
+  ierr = PetscObjectReference((PetscObject)expandedPointsAll[0]);
+  ierr = DMPlexRestoreConeRecursive(dm, points, &depth, &expandedPointsAll, NULL);CHKERRQ(ierr);
+  PetscFunctionReturn(0);
+}
+
+/*@
+  DMPlexGetConeRecursive - Expand each given point into its cone points and do that recursively until we end up just with vertices (DAG points of depth 0, i.e. without cones).
+
+  Not collective
+
+  Input Parameters:
++ dm - The DMPlex
+- points - The IS of points, which must lie in the chart set with DMPlexSetChart()
+
+  Output Parameter:
++ depth - (optional) Size of the output arrays, equal to DMPlex depth, returned by DMPlexGetDepth()
+. expandedPoints - (optional) An array of index sets with recursively expanded cones
+- sections - (optional) An array of sections which describe mappings from points to their cone points
+
+  Level: advanced
+
+  Notes:
+  Like DMPlexGetConeTuple() but recursive.
+
+  Array expandedPoints has size equal to depth. Each expandedPoints[d] contains DAG points with maximum depth d, recursively cone-wise expanded from the input points.
+  For example, for d=0 it contains only vertices, for d=1 it can contain vertices and edges, etc.
+
+  Array section has size equal to depth.  Each PetscSection sections[d] realizes mapping from expandedPoints[d+1] (section points) to expandedPoints[d] (section dofs) as follows:
+  (1) DAG points in expandedPoints[d+1] with depth d+1 to their cone points in expandedPoints[d];
+  (2) DAG points in expandedPoints[d+1] with depth in [0,d] to the same points in expandedPoints[d].
+
+.seealso: DMPlexCreate(), DMPlexGetCone(), DMPlexGetConeTuple(), DMPlexRestoreConeRecursive(), DMPlexGetConeRecursiveVertices(), DMPlexGetDepth()
+@*/
+PetscErrorCode DMPlexGetConeRecursive(DM dm, IS points, PetscInt *depth, IS *expandedPoints[], PetscSection *sections[])
+{
+  const PetscInt      *arr0=NULL, *cone=NULL;
+  PetscInt            *arr=NULL, *newarr=NULL;
+  PetscInt            d, depth_, i, n, newn, cn, co, start, end;
+  IS                  *expandedPoints_;
+  PetscSection        *sections_;
+  PetscErrorCode      ierr;
+
+  PetscFunctionBegin;
+  PetscValidHeaderSpecific(dm, DM_CLASSID, 1);
+  PetscValidHeaderSpecific(points, IS_CLASSID, 2);
+  if (depth) PetscValidIntPointer(depth, 3);
+  if (expandedPoints) PetscValidPointer(expandedPoints, 4);
+  if (sections) PetscValidPointer(sections, 5);
+  ierr = ISGetLocalSize(points, &n);CHKERRQ(ierr);
+  ierr = ISGetIndices(points, &arr0);CHKERRQ(ierr);
+  ierr = DMPlexGetDepth(dm, &depth_);CHKERRQ(ierr);
+  ierr = PetscCalloc1(depth_, &expandedPoints_);CHKERRQ(ierr);
+  ierr = PetscCalloc1(depth_, &sections_);CHKERRQ(ierr);
+  arr = (PetscInt*) arr0; /* this is ok because first generation of arr is not modified */
+  for (d=depth_-1; d>=0; d--) {
+    ierr = PetscSectionCreate(PETSC_COMM_SELF, &sections_[d]);CHKERRQ(ierr);
+    ierr = PetscSectionSetChart(sections_[d], 0, n);CHKERRQ(ierr);
+    for (i=0; i<n; i++) {
+      ierr = DMPlexGetDepthStratum(dm, d+1, &start, &end);CHKERRQ(ierr);
+      if (arr[i] >= start && arr[i] < end) {
+        ierr = DMPlexGetConeSize(dm, arr[i], &cn);CHKERRQ(ierr);
+        ierr = PetscSectionSetDof(sections_[d], i, cn);CHKERRQ(ierr);
+      } else {
+        ierr = PetscSectionSetDof(sections_[d], i, 1);CHKERRQ(ierr);
+      }
+    }
+    ierr = PetscSectionSetUp(sections_[d]);CHKERRQ(ierr);
+    ierr = PetscSectionGetStorageSize(sections_[d], &newn);CHKERRQ(ierr);
+    ierr = PetscMalloc1(newn, &newarr);CHKERRQ(ierr);
+    for (i=0; i<n; i++) {
+      ierr = PetscSectionGetDof(sections_[d], i, &cn);CHKERRQ(ierr);
+      ierr = PetscSectionGetOffset(sections_[d], i, &co);CHKERRQ(ierr);
+      if (cn > 1) {
+        ierr = DMPlexGetCone(dm, arr[i], &cone);CHKERRQ(ierr);
+        ierr = PetscMemcpy(&newarr[co], cone, cn*sizeof(PetscInt));CHKERRQ(ierr);
+      } else {
+        newarr[co] = arr[i];
+      }
+    }
+    ierr = ISCreateGeneral(PETSC_COMM_SELF, newn, newarr, PETSC_OWN_POINTER, &expandedPoints_[d]);CHKERRQ(ierr);
+    arr = newarr;
+    n = newn;
+  }
+  *depth = depth_;
+  if (expandedPoints) *expandedPoints = expandedPoints_;
+  else {
+    for (d=0; d<depth_; d++) {ierr = ISDestroy(&expandedPoints_[d]);CHKERRQ(ierr);}
+    ierr = PetscFree(expandedPoints_);CHKERRQ(ierr);
+  }
+  if (sections) *sections = sections_;
+  else {
+    for (d=0; d<depth_; d++) {ierr = PetscSectionDestroy(&sections_[d]);CHKERRQ(ierr);}
+    ierr = PetscFree(sections_);CHKERRQ(ierr);
+  }
+  PetscFunctionReturn(0);
+}
+
+/*@
+  DMPlexRestoreConeRecursive - Deallocates arrays created by DMPlexGetConeRecursive
+
+  Not collective
+
+  Input Parameters:
++ dm - The DMPlex
+- points - The IS of points, which must lie in the chart set with DMPlexSetChart()
+
+  Output Parameter:
++ depth - (optional) Size of the output arrays, equal to DMPlex depth, returned by DMPlexGetDepth()
+. expandedPoints - (optional) An array of recursively expanded cones
+- sections - (optional) An array of sections which describe mappings from points to their cone points
+
+  Level: advanced
+
+  Notes:
+  See DMPlexGetConeRecursive() for details.
+
+.seealso: DMPlexCreate(), DMPlexGetCone(), DMPlexGetConeTuple(), DMPlexGetConeRecursive(), DMPlexGetConeRecursiveVertices(), DMPlexGetDepth()
+@*/
+PetscErrorCode DMPlexRestoreConeRecursive(DM dm, IS points, PetscInt *depth, IS *expandedPoints[], PetscSection *sections[])
+{
+  PetscInt            d, depth_;
+  PetscErrorCode      ierr;
+
+  PetscFunctionBegin;
+  ierr = DMPlexGetDepth(dm, &depth_);CHKERRQ(ierr);
+  if (depth && *depth != depth_) SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "depth changed since last call to DMPlexGetConeRecursive");
+  if (depth) *depth = 0;
+  if (expandedPoints) {
+    for (d=0; d<depth_; d++) {ierr = ISDestroy(&((*expandedPoints)[d]));CHKERRQ(ierr);}
+    ierr = PetscFree(*expandedPoints);CHKERRQ(ierr);
+  }
+  if (sections)  {
+    for (d=0; d<depth_; d++) {ierr = PetscSectionDestroy(&((*sections)[d]));CHKERRQ(ierr);}
+    ierr = PetscFree(*sections);CHKERRQ(ierr);
+  }
   PetscFunctionReturn(0);
 }
 
@@ -1803,8 +1948,8 @@ PetscErrorCode DMPlexSetCone(DM dm, PetscInt p, const PetscInt cone[])
   Fortran Notes:
   Since it returns an array, this routine is only available in Fortran 90, and you must
   include petsc.h90 in your code.
-
   You must also call DMPlexRestoreConeOrientation() after you finish using the returned array.
+  DMPlexRestoreConeOrientation() is not needed/available in C.
 
 .seealso: DMPlexCreate(), DMPlexGetCone(), DMPlexSetCone(), DMPlexSetChart()
 @*/
@@ -2019,8 +2164,8 @@ PetscErrorCode DMPlexSetSupportSize(DM dm, PetscInt p, PetscInt size)
   Fortran Notes:
   Since it returns an array, this routine is only available in Fortran 90, and you must
   include petsc.h90 in your code.
-
   You must also call DMPlexRestoreSupport() after you finish using the returned array.
+  DMPlexRestoreSupport() is not needed/available in C.
 
 .seealso: DMPlexCreate(), DMPlexSetCone(), DMPlexSetChart(), DMPlexGetCone()
 @*/
@@ -3660,6 +3805,26 @@ PetscErrorCode DMPlexGetConeOrientations(DM dm, PetscInt *coneOrientations[])
 
 /******************************** FEM Support **********************************/
 
+/*
+ Returns number of components and tensor degree for the field.  For interpolated meshes, line should be a point
+ representing a line in the section.
+*/
+static PetscErrorCode PetscSectionFieldGetTensorDegree_Private(PetscSection section,PetscInt field,PetscInt line,PetscBool vertexchart,PetscInt *Nc,PetscInt *k)
+{
+  PetscErrorCode ierr;
+
+  PetscFunctionBeginHot;
+  ierr = PetscSectionGetFieldComponents(section, field, Nc);CHKERRQ(ierr);
+  if (vertexchart) {            /* If we only have a vertex chart, we must have degree k=1 */
+    *k = 1;
+  } else {                      /* Assume the full interpolated mesh is in the chart; lines in particular */
+    /* An order k SEM disc has k-1 dofs on an edge */
+    ierr = PetscSectionGetFieldDof(section, line, field, k);CHKERRQ(ierr);
+    *k = *k / *Nc + 1;
+  }
+  PetscFunctionReturn(0);
+}
+
 /*@
 
   DMPlexSetClosurePermutationTensor - Create a permutation from the default (BFS) point ordering in the closure, to a
@@ -3722,6 +3887,7 @@ PetscErrorCode DMPlexSetClosurePermutationTensor(DM dm, PetscInt point, PetscSec
   DMLabel        label;
   PetscInt      *perm;
   PetscInt       dim, depth, eStart, k, Nf, f, Nc, c, i, j, size = 0, offset = 0, foffset = 0;
+  PetscBool      vertexchart;
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
@@ -3742,22 +3908,24 @@ PetscErrorCode DMPlexSetClosurePermutationTensor(DM dm, PetscInt point, PetscSec
     } else SETERRQ3(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Point %D of depth %D cannot be used to bootstrap spectral ordering for dim %D", point, depth, dim);
   } else SETERRQ3(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Point %D of depth %D cannot be used to bootstrap spectral ordering for dim %D", point, depth, dim);
   if (!section) {ierr = DMGetSection(dm, &section);CHKERRQ(ierr);}
+  {                             /* Determine whether the chart covers all points or just vertices. */
+    PetscInt pStart,pEnd,cStart,cEnd;
+    ierr = DMPlexGetDepthStratum(dm,0,&pStart,&pEnd);CHKERRQ(ierr);
+    ierr = PetscSectionGetChart(section,&cStart,&cEnd);CHKERRQ(ierr);
+    if (pStart == cStart && pEnd == cEnd) vertexchart = PETSC_TRUE; /* Just vertices */
+    else vertexchart = PETSC_FALSE;                                 /* Assume all interpolated points are in chart */
+  }
   ierr = PetscSectionGetNumFields(section, &Nf);CHKERRQ(ierr);
   if (dim < 1) PetscFunctionReturn(0);
   for (f = 0; f < Nf; ++f) {
-    /* An order k SEM disc has k-1 dofs on an edge */
-    ierr = PetscSectionGetFieldDof(section, eStart, f, &k);CHKERRQ(ierr);
-    ierr = PetscSectionGetFieldComponents(section, f, &Nc);CHKERRQ(ierr);
-    k = k/Nc + 1;
+    ierr = PetscSectionFieldGetTensorDegree_Private(section,f,eStart,vertexchart,&Nc,&k);CHKERRQ(ierr);
     size += PetscPowInt(k+1, dim)*Nc;
   }
   ierr = PetscMalloc1(size, &perm);CHKERRQ(ierr);
   for (f = 0; f < Nf; ++f) {
     switch (dim) {
     case 1:
-      ierr = PetscSectionGetFieldDof(section, eStart, f, &k);CHKERRQ(ierr);
-      ierr = PetscSectionGetFieldComponents(section, f, &Nc);CHKERRQ(ierr);
-      k = k/Nc + 1;
+      ierr = PetscSectionFieldGetTensorDegree_Private(section,f,eStart,vertexchart,&Nc,&k);CHKERRQ(ierr);
       /*
         Original ordering is [ edge of length k-1; vtx0; vtx1 ]
         We want              [ vtx0; edge of length k-1; vtx1 ]
@@ -3769,9 +3937,7 @@ PetscErrorCode DMPlexSetClosurePermutationTensor(DM dm, PetscInt point, PetscSec
       break;
     case 2:
       /* The original quad closure is oriented clockwise, {f, e_b, e_r, e_t, e_l, v_lb, v_rb, v_tr, v_tl} */
-      ierr = PetscSectionGetFieldDof(section, eStart, f, &k);CHKERRQ(ierr);
-      ierr = PetscSectionGetFieldComponents(section, f, &Nc);CHKERRQ(ierr);
-      k = k/Nc + 1;
+      ierr = PetscSectionFieldGetTensorDegree_Private(section,f,eStart,vertexchart,&Nc,&k);CHKERRQ(ierr);
       /* The SEM order is
 
          v_lb, {e_b}, v_rb,
@@ -3815,9 +3981,7 @@ PetscErrorCode DMPlexSetClosurePermutationTensor(DM dm, PetscInt point, PetscSec
           e_bl, e_bb, e_br, e_bf,  e_tf, e_tr, e_tb, e_tl,  e_rf, e_lf, e_lb, e_rb,
           v_blf, v_blb, v_brb, v_brf, v_tlf, v_trf, v_trb, v_tlb}
       */
-      ierr = PetscSectionGetFieldDof(section, eStart, f, &k);CHKERRQ(ierr);
-      ierr = PetscSectionGetFieldComponents(section, f, &Nc);CHKERRQ(ierr);
-      k = k/Nc + 1;
+      ierr = PetscSectionFieldGetTensorDegree_Private(section,f,eStart,vertexchart,&Nc,&k);CHKERRQ(ierr);
       /* The SEM order is
          Bottom Slice
          v_blf, {e^{(k-1)-n}_bf}, v_brf,
@@ -6279,7 +6443,7 @@ static PetscErrorCode DMPlexCreateDimStratum(DM dm, DMLabel depthLabel, DMLabel 
   DMPlexSetHybridBounds - Set the first mesh point of each dimension which is a hybrid
 
   Input Parameters:
-. dm   - The DMPlex object
++ dm   - The DMPlex object
 . cMax - The first hybrid cell
 . fMax - The first hybrid face
 . eMax - The first hybrid edge
@@ -6850,7 +7014,7 @@ PetscErrorCode DMPlexCheckGeometry(DM dm)
 {
   PetscReal      detJ, J[9], refVol = 1.0;
   PetscReal      vol;
-  PetscInt       dim, depth, d, cStart, cEnd, c;
+  PetscInt       dim, depth, d, cStart, cEnd, c, cMax;
   PetscErrorCode ierr;
 
   PetscFunctionBegin;
@@ -6858,7 +7022,9 @@ PetscErrorCode DMPlexCheckGeometry(DM dm)
   ierr = DMPlexGetDepth(dm, &depth);CHKERRQ(ierr);
   for (d = 0; d < dim; ++d) refVol *= 2.0;
   ierr = DMPlexGetHeightStratum(dm, 0, &cStart, &cEnd);CHKERRQ(ierr);
-  for (c = cStart; c < cEnd; ++c) {
+  ierr = DMPlexGetHybridBounds(dm, &cMax, NULL, NULL, NULL);CHKERRQ(ierr);
+  cMax = cMax < 0 ? cEnd : cMax;
+  for (c = cStart; c < cMax; ++c) {
     ierr = DMPlexComputeCellGeometryFEM(dm, c, NULL, NULL, J, NULL, &detJ);CHKERRQ(ierr);
     if (detJ <= 0.0) SETERRQ2(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Mesh cell %D is inverted, |J| = %g", c, (double) detJ);
     ierr = PetscInfo2(dm, "Cell %D FEM Volume %g\n", c, (double) detJ*refVol);CHKERRQ(ierr);

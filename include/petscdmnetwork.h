@@ -1,8 +1,8 @@
 /*
   DMNetwork, for parallel unstructured network problems.
 */
-#if !defined(__PETSCDMNETWORK_H)
-#define __PETSCDMNETWORK_H
+#if !defined(PETSCDMNETWORK_H)
+#define PETSCDMNETWORK_H
 
 #include <petscdmplex.h>
 #include <petscviewer.h>
@@ -32,6 +32,8 @@ PETSC_EXTERN PetscErrorCode DMNetworkAddNumVariables(DM,PetscInt,PetscInt);
 PETSC_EXTERN PetscErrorCode DMNetworkGetNumVariables(DM,PetscInt,PetscInt*);
 PETSC_EXTERN PetscErrorCode DMNetworkSetNumVariables(DM,PetscInt,PetscInt);
 PETSC_EXTERN PetscErrorCode DMNetworkAssembleGraphStructures(DM);
+PETSC_EXTERN PetscErrorCode DMNetworkSetVertexLocalToGlobalOrdering(DM);
+PETSC_EXTERN PetscErrorCode DMNetworkGetVertexLocalToGlobalOrdering(DM,PetscInt,PetscInt*);
 PETSC_EXTERN PetscErrorCode PetscSFGetSubSF(PetscSF,ISLocalToGlobalMapping,PetscSF*);
 PETSC_EXTERN PetscErrorCode DMNetworkDistribute(DM*,PetscInt);
 PETSC_EXTERN PetscErrorCode DMNetworkGetSupportingEdges(DM,PetscInt,PetscInt*,const PetscInt*[]);

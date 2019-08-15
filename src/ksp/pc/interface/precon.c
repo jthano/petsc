@@ -140,7 +140,7 @@ PetscErrorCode  PCGetDiagonalScale(PC pc,PetscBool  *flag)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(pc,PC_CLASSID,1);
-  PetscValidPointer(flag,2);
+  PetscValidBoolPointer(flag,2);
   *flag = pc->diagonalscale;
   PetscFunctionReturn(0);
 }
@@ -194,7 +194,7 @@ PetscErrorCode  PCSetDiagonalScale(PC pc,Vec s)
    Input Parameters:
 +  pc - the preconditioner context
 .  in - input vector
-+  out - scaled vector (maybe the same as in)
+-  out - scaled vector (maybe the same as in)
 
    Level: intermediate
 
@@ -233,7 +233,7 @@ PetscErrorCode  PCDiagonalScaleLeft(PC pc,Vec in,Vec out)
    Input Parameters:
 +  pc - the preconditioner context
 .  in - input vector
-+  out - scaled vector (maybe the same as in)
+-  out - scaled vector (maybe the same as in)
 
    Level: intermediate
 
@@ -590,7 +590,7 @@ PetscErrorCode  PCApplyTransposeExists(PC pc,PetscBool  *flg)
 {
   PetscFunctionBegin;
   PetscValidHeaderSpecific(pc,PC_CLASSID,1);
-  PetscValidPointer(flg,2);
+  PetscValidBoolPointer(flg,2);
   if (pc->ops->applytranspose) *flg = PETSC_TRUE;
   else *flg = PETSC_FALSE;
   PetscFunctionReturn(0);
@@ -942,7 +942,7 @@ PetscErrorCode  PCSetUpOnBlocks(PC pc)
    Calling sequence of func:
 $     func (PC pc,PetscInt nsub,IS *row,IS *col,Mat *submat,void *ctx);
 
-.  row - an array of index sets that contain the global row numbers
++  row - an array of index sets that contain the global row numbers
          that comprise each local submatrix
 .  col - an array of index sets that contain the global column numbers
          that comprise each local submatrix

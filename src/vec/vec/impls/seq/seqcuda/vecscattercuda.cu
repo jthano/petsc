@@ -3,6 +3,7 @@
 */
 
 #define PETSC_SKIP_SPINLOCK
+#define PETSC_SKIP_CXX_COMPLEX_FIX
 
 #include <petscconf.h>
 #include <petsc/private/vecimpl.h>          /*I "petscvec.h" I*/
@@ -20,6 +21,7 @@ PetscErrorCode VecScatterCUDAIndicesCreate_StoS(PetscInt n,PetscInt toFirst,Pets
   PetscInt                   *intVecGPU;
   int                        device;
   cudaDeviceProp             props;
+  PetscErrorCode             ierr;
 
   PetscFunctionBegin;
   cci = new struct _p_PetscCUDAIndices;
@@ -34,6 +36,7 @@ PetscErrorCode VecScatterCUDAIndicesCreate_StoS(PetscInt n,PetscInt toFirst,Pets
       /* allocate GPU memory for the to-slots */
       err = cudaMalloc((void **)&intVecGPU,n*sizeof(PetscInt));CHKERRCUDA(err);
       err = cudaMemcpy(intVecGPU,fslots,n*sizeof(PetscInt),cudaMemcpyHostToDevice);CHKERRCUDA(err);
+      ierr = PetscLogCpuToGpu(n*sizeof(PetscInt));CHKERRQ(ierr);
 
       /* assign the pointer to the struct */
       stos_scatter->fslots = intVecGPU;
@@ -54,6 +57,7 @@ PetscErrorCode VecScatterCUDAIndicesCreate_StoS(PetscInt n,PetscInt toFirst,Pets
       /* allocate GPU memory for the to-slots */
       err = cudaMalloc((void **)&intVecGPU,n*sizeof(PetscInt));CHKERRCUDA(err);
       err = cudaMemcpy(intVecGPU,tslots,n*sizeof(PetscInt),cudaMemcpyHostToDevice);CHKERRCUDA(err);
+      ierr = PetscLogCpuToGpu(n*sizeof(PetscInt));CHKERRQ(ierr);
 
       /* assign the pointer to the struct */
       stos_scatter->tslots = intVecGPU;

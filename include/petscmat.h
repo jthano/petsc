@@ -1,8 +1,8 @@
 /*
      Include file for the matrix component of PETSc
 */
-#ifndef __PETSCMAT_H
-#define __PETSCMAT_H
+#ifndef PETSCMAT_H
+#define PETSCMAT_H
 #include <petscvec.h>
 
 /*S
@@ -27,6 +27,9 @@ typedef const char* MatType;
 #define MATMAIJ            "maij"
 #define MATSEQMAIJ         "seqmaij"
 #define MATMPIMAIJ         "mpimaij"
+#define MATKAIJ            "kaij"
+#define MATSEQKAIJ         "seqkaij"
+#define MATMPIKAIJ         "mpikaij"
 #define MATIS              "is"
 #define MATAIJ             "aij"
 #define MATSEQAIJ          "seqaij"
@@ -55,6 +58,7 @@ typedef const char* MatType;
 #define MATSHELL           "shell"
 #define MATDENSE           "dense"
 #define MATSEQDENSE        "seqdense"
+#define MATSEQDENSECUDA    "seqdensecuda"
 #define MATMPIDENSE        "mpidense"
 #define MATELEMENTAL       "elemental"
 #define MATBAIJ            "baij"
@@ -128,6 +132,7 @@ typedef const char* MatSolverType;
 #define MATSOLVERPETSC            "petsc"
 #define MATSOLVERBAS              "bas"
 #define MATSOLVERCUSPARSE         "cusparse"
+#define MATSOLVERCUDA             "cuda"
 
 /*E
     MatFactorType - indicates what type of factorization is requested
@@ -397,7 +402,8 @@ typedef enum {MAT_OPTION_MIN = -3,
               MAT_SUBSET_OFF_PROC_ENTRIES = 20,
               MAT_SUBMAT_SINGLEIS = 21,
               MAT_STRUCTURE_ONLY = 22,
-              MAT_OPTION_MAX = 23} MatOption;
+              MAT_SORTED_FULL = 23,
+              MAT_OPTION_MAX = 24} MatOption;
 
 PETSC_EXTERN const char *const *MatOptions;
 PETSC_EXTERN PetscErrorCode MatSetOption(Mat,MatOption,PetscBool);
@@ -699,12 +705,10 @@ PETSC_STATIC_INLINE PetscErrorCode MatSetValueLocal(Mat v,PetscInt i,PetscInt j,
 
    Do not malloc or free dnz and onz, that is handled internally by these routines
 
-   Use MatPreallocateInitializeSymmetric() for symmetric matrices (MPISBAIJ matrices)
-
    This is a MACRO not a function because it has a leading { that is closed by PetscPreallocateFinalize().
 
 .seealso: MatPreallocateFinalize(), MatPreallocateSet(), MatPreallocateSymmetricSetBlock(), MatPreallocateSetLocal(),
-          MatPreallocateInitializeSymmetric(), MatPreallocateSymmetricSetLocalBlock()
+          MatPreallocateSymmetricSetLocalBlock()
 M*/
 #define MatPreallocateInitialize(comm,nrows,ncols,dnz,onz) 0; \
 do { \
@@ -964,7 +968,7 @@ do { PetscInt __i; \
    Not Collective
 
    Input Parameters:
-.  A - matrix
++  A - matrix
 .  row - row where values exist (must be local to this process)
 .  ncols - number of columns
 .  cols - columns with nonzeros
@@ -1051,6 +1055,8 @@ PETSC_EXTERN PetscErrorCode MatMPIAdjCreateNonemptySubcommMat(Mat,Mat*);
 PETSC_EXTERN PetscErrorCode MatSeqDenseSetLDA(Mat,PetscInt);
 PETSC_EXTERN PetscErrorCode MatDenseGetLDA(Mat,PetscInt*);
 PETSC_EXTERN PetscErrorCode MatDenseGetLocalMatrix(Mat,Mat*);
+
+PETSC_EXTERN PetscErrorCode MatBlockMatSetPreallocation(Mat,PetscInt,PetscInt,const PetscInt[]);
 
 PETSC_EXTERN PetscErrorCode MatStoreValues(Mat);
 PETSC_EXTERN PetscErrorCode MatRetrieveValues(Mat);
@@ -1638,6 +1644,20 @@ PETSC_EXTERN PetscErrorCode MatComputeOperatorTranspose(Mat,MatType,Mat*);
 
 PETSC_DEPRECATED_FUNCTION("Use MatComputeOperator() (since version 3.12)") PETSC_STATIC_INLINE PetscErrorCode MatComputeExplicitOperator(Mat A,Mat* B) { return MatComputeOperator(A,NULL,B); }
 PETSC_DEPRECATED_FUNCTION("Use MatComputeOperatorTranspose() (since version 3.12)") PETSC_STATIC_INLINE PetscErrorCode MatComputeExplicitOperatorTranspose(Mat A,Mat* B) { return MatComputeOperatorTranspose(A,NULL,B); }
+
+PETSC_EXTERN PetscErrorCode MatCreateKAIJ(Mat,PetscInt,PetscInt,const PetscScalar[],const PetscScalar[],Mat*);
+PETSC_EXTERN PetscErrorCode MatKAIJGetAIJ(Mat,Mat*);
+PETSC_EXTERN PetscErrorCode MatKAIJGetS(Mat,PetscInt*,PetscInt*,PetscScalar**);
+PETSC_EXTERN PetscErrorCode MatKAIJGetSRead(Mat,PetscInt*,PetscInt*,const PetscScalar**);
+PETSC_EXTERN PetscErrorCode MatKAIJRestoreS(Mat,PetscScalar**);
+PETSC_EXTERN PetscErrorCode MatKAIJRestoreSRead(Mat,const PetscScalar**);
+PETSC_EXTERN PetscErrorCode MatKAIJGetT(Mat,PetscInt*,PetscInt*,PetscScalar**);
+PETSC_EXTERN PetscErrorCode MatKAIJGetTRead(Mat,PetscInt*,PetscInt*,const PetscScalar**);
+PETSC_EXTERN PetscErrorCode MatKAIJRestoreT(Mat,PetscScalar**);
+PETSC_EXTERN PetscErrorCode MatKAIJRestoreTRead(Mat,const PetscScalar**);
+PETSC_EXTERN PetscErrorCode MatKAIJSetAIJ(Mat,Mat);
+PETSC_EXTERN PetscErrorCode MatKAIJSetS(Mat,PetscInt,PetscInt,const PetscScalar []);
+PETSC_EXTERN PetscErrorCode MatKAIJSetT(Mat,PetscInt,PetscInt,const PetscScalar []);
 
 PETSC_EXTERN PetscErrorCode MatDiagonalScaleLocal(Mat,Vec);
 

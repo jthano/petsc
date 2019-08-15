@@ -34,7 +34,8 @@ PetscErrorCode MatSetUp_Preallocator(Mat A)
   ierr = MatGetLocalSize(A, &m, NULL);CHKERRQ(ierr);
   ierr = PetscHSetIJCreate(&p->ht);CHKERRQ(ierr);
   ierr = MatGetBlockSize(A, &bs);CHKERRQ(ierr);
-  ierr = MatStashCreate_Private(PetscObjectComm((PetscObject) A), bs, &A->stash);CHKERRQ(ierr);
+  /* Do not bother bstash since MatPreallocator does not implement MatSetValuesBlocked */
+  ierr = MatStashCreate_Private(PetscObjectComm((PetscObject) A), 1, &A->stash);CHKERRQ(ierr);
   /* arrays are for blocked rows/cols */
   mbs  = m/bs;
   ierr = PetscCalloc4(mbs, &p->dnz, mbs, &p->onz, mbs, &p->dnzu, mbs, &p->onzu);CHKERRQ(ierr);
@@ -143,18 +144,49 @@ PetscErrorCode MatPreallocatorPreallocate_Preallocator(Mat mat, PetscBool fill, 
   ierr = MatGetBlockSize(mat, &bs);CHKERRQ(ierr);
   ierr = MatXAIJSetPreallocation(A, bs, p->dnz, p->onz, p->dnzu, p->onzu);CHKERRQ(ierr);
   ierr = MatSetOption(A, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE);CHKERRQ(ierr);
+  if (fill) {
+    PetscHashIter  hi;
+    PetscHashIJKey key;
+    PetscScalar    *zeros;
+
+    ierr = PetscCalloc1(bs*bs,&zeros);CHKERRQ(ierr);
+
+    PetscHashIterBegin(p->ht,hi);
+    while (!PetscHashIterAtEnd(p->ht,hi)) {
+      PetscHashIterGetKey(p->ht,hi,key);
+      PetscHashIterNext(p->ht,hi);
+      ierr = MatSetValuesBlocked(A,1,&key.i,1,&key.j,zeros,INSERT_VALUES);CHKERRQ(ierr);
+    }
+    ierr = PetscFree(zeros);CHKERRQ(ierr);
+
+    ierr = MatAssemblyBegin(A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+    ierr = MatAssemblyEnd(A,MAT_FINAL_ASSEMBLY);CHKERRQ(ierr);
+  }
   PetscFunctionReturn(0);
 }
 
 /*@
-  MatPreallocatorPreallocate - Preallocates the input matrix, optionally filling it with zeros
+  MatPreallocatorPreallocate - Preallocates the A matrix, using information from mat, optionally filling A with zeros
 
   Input Parameter:
 + mat  - the preallocator
-- fill - fill the matrix with zeros
+. fill - fill the matrix with zeros
+- A    - the matrix to be preallocated
 
-  Output Parameter:
-. A    - the matrix
+  Notes:
+  This Mat implementation provides a helper utility to define the correct
+  preallocation data for a given nonzero structure. Use this object like a
+  regular matrix, e.g. loop over the nonzero structure of the matrix and
+  call MatSetValues() or MatSetValuesBlocked() to indicate the nonzero locations.
+  The matrix entires provided to MatSetValues() will be ignored, it only uses
+  the row / col indices provided to determine the information required to be
+  passed to MatXAIJSetPreallocation(). Once you have looped over the nonzero
+  structure, you must call MatAssemblyBegin(), MatAssemblyEnd() on mat.
+
+  After you have assembled the preallocator matrix (mat), call MatPreallocatorPreallocate()
+  to define the preallocation information on the matrix (A). Setting the parameter
+  fill = PETSC_TRUE will insert zeros into the matrix A. Internally MatPreallocatorPreallocate()
+  will call MatSetOption(A, MAT_NEW_NONZERO_ALLOCATION_ERR, PETSC_TRUE);
 
   Level: advanced
 
